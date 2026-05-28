@@ -1,0 +1,64 @@
+# Experiment
+id: default
+seed: 1
+
+# Environment
+env: Pendulum-v1
+symbolic_env: false
+max_episode_length: 1000
+action_repeat: 2
+bit_depth: 5
+render: false
+
+# Training
+episodes: 1000
+seed_episodes: 5
+collect_interval: 100
+batch_size: 50
+chunk_size: 50
+experience_size: 1000000
+
+# Model
+embedding_size: 1024
+hidden_size: 200
+belief_size: 200
+state_size: 30
+activation_function: relu
+
+# Optimisation
+learning_rate: 1e-3
+learning_rate_schedule: 0
+adam_epsilon: 1e-4
+grad_clip_norm: 1000
+
+# Overshooting
+overshooting_distance: 50
+overshooting_kl_beta: 0.0
+overshooting_reward_scale: 0.0
+
+# Losses
+global_kl_beta: 0.0
+free_nats: 3.0
+
+# Planning (CEM)
+planning_horizon: 12
+optimisation_iters: 10
+candidates: 1000
+top_candidates: 100
+
+# Action noise
+action_noise: 0.3
+
+# Hardware
+disable_cuda: false
+
+# Evaluation
+test: false
+test_interval: 25
+test_episodes: 10
+
+# Checkpointing
+checkpoint_interval: 50
+checkpoint_experience: false
+models: ""
+experience_replay_path: ""
