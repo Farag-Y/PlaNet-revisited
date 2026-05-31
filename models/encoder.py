@@ -8,18 +8,18 @@ class Encoder(nn.Module):
     super().__init__()
     self.act_fn = getattr(F, non_linearity)
     self.embedding_size= embedding_size
-
-    self.conv1 = nn.Conv2d(3, 32, 6, stride=2)
-    self.conv2 = nn.Conv2d(32,64,6,stride=2)
-    self.conv3 = nn.Conv2d(64,128,5,stride=2)
-    self.conv4 = nn.Conv2d(128,256,5,stride=2)
+    #TODO: Calculate input shapes and output shapes to check, spend some time to understand better conv layers and the whole process
+    self.conv1 = nn.Conv2d(3, 32, 4, stride=2)
+    self.conv2 = nn.Conv2d(32,64,4,stride=2)
+    self.conv3 = nn.Conv2d(64,128,4,stride=2)
+    self.conv4 = nn.Conv2d(128,256,4,stride=2)
     self.fc1 = nn.Linear(1024,embedding_size)
 
 
   def forward(self,observation):
     hidden = self.act_fn(self.conv1(observation))
-    hidden = self.act_fn(self.conv2(observation))
-    hidden = self.act_fn(self.conv3(observation))
-    hidden = self.act_fn(self.conv4(observation))
-    hidden = self.fc1(hidden) # Is a reshape needed here ?
+    hidden = self.act_fn(self.conv2(hidden))
+    hidden = self.act_fn(self.conv3(hidden))
+    hidden = self.act_fn(self.conv4(hidden))
+    hidden = self.fc1(hidden.view(-1,1024))
     return hidden

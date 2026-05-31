@@ -46,10 +46,10 @@ class ExperienceReplay():
     def _get_batch(self, idxs, batch_size, batch_length):
         # Stack list of per-sample index arrays into shape (batch_size, batch_length)
         stacked = np.stack(idxs, axis=0)
-        obs = torch.as_tensor(self.observations[stacked]).to(self.device)
-        acts = torch.as_tensor(self.actions[stacked]).to(self.device)
-        rewards = torch.as_tensor(self.rewards[stacked]).to(self.device)
-        non_terminals = torch.as_tensor(self.non_terminals[stacked]).to(self.device)
+        obs = torch.as_tensor(self.observations[stacked]).to(self.device).transpose(0, 1)
+        acts = torch.as_tensor(self.actions[stacked]).to(self.device).transpose(0, 1)
+        rewards = torch.as_tensor(self.rewards[stacked]).to(self.device).transpose(0, 1)
+        non_terminals = torch.as_tensor(self.non_terminals[stacked]).to(self.device).transpose(0, 1)
         return obs, acts, rewards, non_terminals  ##TODO: This function needs post processing of observations + make sure that the format is correct.
 
     def sample(self, batch_size, batch_length):
