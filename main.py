@@ -23,6 +23,7 @@ from utils import model_wrapper
     7. Second data collection round in the for loop
     8. Latent overshooting
     9. Sampling data & losses
+    9.5 saving checkpoints
     10. Reloading data from a checkpoint
 '''
 
@@ -73,14 +74,14 @@ def execute_runs(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,encoder
         obs, actions, rewards, nonterminals = experience_replay.sample(cfg.batch_size,  cfg.chunk_size) 
         encoded_obs = model_wrapper(encoder,obs[1:])#TODO: a reshape
         rssm_output:RSSMOutput = rssm(init_state, actions[:-1], init_belief,encoded_obs, nonterminals[:-1])
-        predicted_reward = model_wrapper(reward_model,(rssm_output.det_hidden_states,rssm_output.posterior_states))
+        predicted_reward = model_wrapper(reward_model,rssm_output.det_hidden_states,rssm_output.posterior_states)
 
-        kl_div = kl_divergence(Normal(rssm_output.posterior_means,rssm_output.posterior_std_devs),Normal(rssm_output.prior_means,rssm_output.prior_std_devs))#TODO: reshape
+        kl_div = kl_divergence(Normal(rssm_output.posterior_means,rssm_output.posterior_std_devs),Normal(rssm_output.prior_means,rssm_output.prior_std_devs)).sum(dim=-1)#TODO: reshape
         
-        kl_loss=torch.max(kl_div,free_nats)#TODO:Mean or smth ?
-        decoded_obs = decoder_model((rssm_output.det_hidden_states,rssm_output.posterior_states))#TODO: any reshaping ?
-        obs_loss = F.mse_loss(rssm_output.decoded_obs,obs[1:])#Reshape correctly
-        reward_loss = F.mse_loss(rssm_output,rewards)
+        kl_loss=torch.max(kl_div,free_nats).mean()
+        decoded_obs = model_wrapper(decoder_model,rssm_output.det_hidden_states,rssm_output.posterior_states)#TODO: any reshaping ?
+        obs_loss = F.mse_loss(decoded_obs,obs[1:],reduction='none').sum((2,3,4)).mean()#Reshape correctly
+        reward_loss = F.mse_loss(predicted_reward,rewards[-1:],reduction='none').mean()
         ##TODO: calculate latent overshooting
         ##TODO: ramping linear rates ? 
         adam_optim.zero_grad()

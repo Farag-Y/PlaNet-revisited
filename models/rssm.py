@@ -52,7 +52,7 @@ class RSSM(nn.Module):
             prior_means[t+1],prior_std_devs[t+1] = torch.chunk(self.fc_state_prior(hidden_prior),2,dim=1)
             prior_std_devs[t+1] = self.std_dev_fn(prior_std_devs[t+1]) + self.min_std_dev
             ##Reparam trick
-            prior_states = prior_means[t+1] + prior_std_devs[t+1]*torch.randn_like(prior_std_devs[t+1]) #TODO: rand like Std_dev here is correct ?
+            prior_states[t+1] = prior_means[t+1] + prior_std_devs[t+1]*torch.randn_like(prior_std_devs[t+1]) #TODO: rand like Std_dev here is correct ?
             ##Posterior 
             if observations is not None:
                 ## TODO: is this correct here ?? make sure that shape and concatation is correct
@@ -60,7 +60,7 @@ class RSSM(nn.Module):
                 posterior_means[t+1],posterior_std_devs[t+1] = torch.chunk(self.fc_state_prior(hidden_posterior),2,dim=1)
                 posterior_std_devs[t+1] = self.std_dev_fn(posterior_std_devs[t+1])+self.min_std_dev
                 #Reparam trick
-                posterior_states = posterior_means[t+1] + posterior_std_devs[t+1]*torch.randn_like(posterior_std_devs[t+1]) #TODO: rand like Std_dev here is correct ?
+                posterior_states[t+1] = posterior_means[t+1] + posterior_std_devs[t+1]*torch.randn_like(posterior_std_devs[t+1]) #TODO: rand like Std_dev here is correct ?
                 # Return new hidden states
         return RSSMOutput(
             det_hidden_states=torch.stack(det_hidden_states[1:], dim=0),
