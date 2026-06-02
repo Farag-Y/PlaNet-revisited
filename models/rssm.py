@@ -42,7 +42,7 @@ class RSSM(nn.Module):
         #Belifes is the detemnistic hidden state
         det_hidden_states[0],prior_states[0],posterior_states[0] = prev_belief,prev_state,prev_state #TODO: Why here does prior and posterior share the same state ?
         for t in range(actions.shape[0]):
-            prev_state = posterior_states[t] if observations is None else prior_states[t]
+            prev_state = prior_states[t] if observations is None else posterior_states[t]
             prev_state = prev_state if nonterminals is None else prev_state*nonterminals[t]
             hidden_input = self.act_fn(self.fc_embed_state_action(torch.concat((prev_state,actions[t]),dim=1)))## TODO: Why dimension 1 ?
             det_hidden_states[t+1]= self.rnn(hidden_input,det_hidden_states[t])
@@ -57,7 +57,7 @@ class RSSM(nn.Module):
             if observations is not None:
                 ## TODO: is this correct here ?? make sure that shape and concatation is correct
                 hidden_posterior = self.act_fn(self.fc_embed_belief_posterior(torch.concat((det_hidden_states[t+1],observations[t]),dim=1)))
-                posterior_means[t+1],posterior_std_devs[t+1] = torch.chunk(self.fc_state_prior(hidden_posterior),2,dim=1)
+                posterior_means[t+1],posterior_std_devs[t+1] = torch.chunk(self.fc_state_posterior(hidden_posterior),2,dim=1)
                 posterior_std_devs[t+1] = self.std_dev_fn(posterior_std_devs[t+1])+self.min_std_dev
                 #Reparam trick
                 posterior_states[t+1] = posterior_means[t+1] + posterior_std_devs[t+1]*torch.randn_like(posterior_std_devs[t+1]) #TODO: rand like Std_dev here is correct ?

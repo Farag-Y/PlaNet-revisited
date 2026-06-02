@@ -9,7 +9,8 @@ from models.rssm import RSSM,RSSMOutput
 from models.observation_model import ObservationModel
 from models.encoder import Encoder
 from models.reward_model import RewardModel
-from torch import optim
+from models.planner import Planner
+from torch import nn, optim
 from torch.distributions import Normal
 from tqdm import tqdm
 from torch.nn import functional as F
@@ -60,10 +61,48 @@ def initialize_models(cfg:DictConfig,device:str,env):
     decoder_model = ObservationModel(belief_size=cfg.belief_size,state_size=cfg.state_size,embedding_size=cfg.embedding_size)
     reward_model = RewardModel(belief_size=cfg.belief_size,state_size=cfg.state_size,hidden_size=cfg.hidden_size)
     encoder = Encoder(embedding_size=cfg.embedding_size)
-    parameter_list = list(decoder_model.parameters()) + list(reward_model.parameters()) + list(encoder.parameters())
+    parameter_list = list(rssm.parameters()) + list(decoder_model.parameters()) + list(reward_model.parameters()) + list(encoder.parameters())
     adam_optim =  optim.Adam(parameter_list, lr = cfg.learning_rate , eps=cfg.adam_epsilon)#TODO: Implement learning rate scheduler ?
-    #TODO: Still :  planner
-    return rssm,decoder_model,reward_model,encoder,adam_optim
+    min_action, max_action = env.action_range
+    # planner = Planner(
+    #     action_size=env.action_size,
+    #     planning_horizon=cfg.planning_horizon,
+    #     optimisation_iters=cfg.optimisation_iters,
+    #     candidates=cfg.candidates,
+    #     top_candidates=cfg.top_candidates,
+    #     transition_model=rssm,
+    #     reward_model=reward_model,
+    #     min_action=min_action,
+    #     max_action=max_action,
+    # ).to(device=device)
+    planner=None
+    return rssm,decoder_model,reward_model,encoder,adam_optim,planner
+
+# def collect_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,experience_replay:ExperienceReplay,metrics:Metrics):
+#     belief = torch.zeros(1, cfg.belief_size, device=device)
+#     state  = torch.zeros(1, cfg.state_size,  device=device)
+#     observation = env.reset()
+#     done = False
+#     while not done:
+#         with torch.no_grad():
+#             encoded = encoder(observation.unsqueeze(0).to(device))
+#             # Update posterior belief with current observation
+#             rssm_out = rssm(state, torch.zeros(1, 1, env.action_size, device=device), belief, encoded.unsqueeze(0))
+#             belief = rssm_out.det_hidden_states[-1]
+#             state  = rssm_out.posterior_states[-1]
+#             action = planner(belief, state).squeeze(0)
+#         # Add exploration noise
+#         action = (action + cfg.action_noise * torch.randn_like(action)).clamp(planner.min_action, planner.max_action)
+#         next_obs, reward, done = env.step(action.cpu())
+#         experience_replay.append(observation, reward, action.cpu(), done)
+#         observation = next_obs
+#         # Update belief with taken action (prior step, no observation)
+#         with torch.no_grad():
+#             rssm_out = rssm(state, action.unsqueeze(0).unsqueeze(0), belief)
+#             belief = rssm_out.det_hidden_states[-1]
+#             state  = rssm_out.prior_states[-1]
+#     metrics.steps.append(env.t + metrics.last_step)
+#     metrics.episodes.append(metrics.last_episode + 1)
 
 def execute_runs(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics:Metrics,device):
     global_prior = Normal(torch.zeros(cfg.batch_size, cfg.state_size, device=device), torch.ones(cfg.batch_size, cfg.state_size, device=device))  # Global prior N(0, I)
@@ -81,19 +120,19 @@ def execute_runs(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,encoder
         kl_loss=torch.max(kl_div,free_nats).mean()
         decoded_obs = model_wrapper(decoder_model,rssm_output.det_hidden_states,rssm_output.posterior_states)#TODO: any reshaping ?
         obs_loss = F.mse_loss(decoded_obs,obs[1:],reduction='none').sum((2,3,4)).mean()#Reshape correctly
-        reward_loss = F.mse_loss(predicted_reward,rewards[-1:],reduction='none').mean()
+        reward_loss = F.mse_loss(predicted_reward,rewards[1:],reduction='none').mean()
         ##TODO: calculate latent overshooting
         ##TODO: ramping linear rates ? 
         adam_optim.zero_grad()
         (kl_loss+obs_loss+reward_loss).backward()
+        nn.utils.clip_grad_norm_(adam_optim.param_groups[0]['params'], cfg.grad_clip_norm)
         adam_optim.step()
         losses.append([kl_loss.item(),obs_loss.item(),reward_loss.item()])
     return losses
-def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics:Metrics,device):
-    #TODO: Constants, need to be correctly identified
-    # Allowed deviation in KL divergence
+def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env):
     for episode in tqdm(range(metrics.last_episode+1, cfg.episodes + 1), total=cfg.episodes, initial=metrics.last_episode):
-        execute_runs(cfg.collect_interval,cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device )
+        execute_runs(cfg.collect_interval,cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device)
+        collect_with_planner(cfg,device,env,rssm,encoder,planner,experience_replay,metrics)
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
     device = "cuda" if not cfg.disable_cuda and torch.cuda.is_available() else "cpu"
@@ -107,8 +146,8 @@ def main(cfg: DictConfig) -> None:
 
     metrics = Metrics()
     experience_replay=collect_observations(cfg,device,env,metrics)
-    rssm,decoder_model,reward_model,encoder,adam_optim= initialize_models(cfg,device,env)
-    train(cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device)
+    rssm,decoder_model,reward_model,encoder,adam_optim,planner= initialize_models(cfg,device,env)
+    train(cfg,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics,device,env)
 
 
 if __name__ == "__main__":
