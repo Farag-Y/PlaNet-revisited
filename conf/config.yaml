@@ -13,7 +13,7 @@ render: false
 # Training
 episodes: 1000
 seed_episodes: 5
-collect_interval: 100
+collect_interval: 10 #TODO: Should be 100
 batch_size: 50
 chunk_size: 50
 experience_size: 100000

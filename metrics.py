@@ -10,9 +10,9 @@ class Metrics:
     train_rewards:    List[float]       = field(default_factory=list)
     test_episodes:    List[int]         = field(default_factory=list)
     test_rewards:     List[List[float]] = field(default_factory=list)
-    observation_loss: List[tuple]       = field(default_factory=list)
-    reward_loss:      List[tuple]       = field(default_factory=list)
-    kl_loss:          List[tuple]       = field(default_factory=list)
+    observation_loss: List[float]       = field(default_factory=list)
+    reward_loss:      List[float]       = field(default_factory=list)
+    kl_loss:          List[float]       = field(default_factory=list)
 
     @property
     def last_episode(self) -> int:

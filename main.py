@@ -1,5 +1,6 @@
 import torch
 import hydra
+import matplotlib.pyplot as plt
 from omegaconf import DictConfig
 
 from env_wrapper import Env
@@ -19,11 +20,10 @@ from utils import model_wrapper
 
 '''
     TODO:
-    X.Planner 
-    6. Connecting everything together properly
-    7. Second data collection round in the for loop
-    8. Latent overshooting
     9. Sampling data & losses
+
+    6. Connecting everything together properly
+    8. Latent overshooting
     9.5 saving checkpoints
     10. Reloading data from a checkpoint
 '''
@@ -80,14 +80,14 @@ def initialize_models(cfg:DictConfig,device:str,env):
 
 def execute_one_run_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,action,observation,belief,state,explore):
     with torch.no_grad():
-
-        encoded = encoder(observation.unsqueeze(0).to(device))
+        encoded = encoder(observation.to(device))
         # Update posterior belief with current observation
         rssm_out = rssm(state, action.unsqueeze(0), belief, encoded.unsqueeze(0))
         belief = rssm_out.det_hidden_states[-1]
         state  = rssm_out.posterior_states[-1]
         action = planner(belief, state)
         # Add exploration noise
+        
         if explore:
             action = (action + cfg.action_noise * torch.randn_like(action))
         action=action.clamp(planner.min_action, planner.max_action)
@@ -100,16 +100,18 @@ def collect_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,expe
     action=  torch.zeros(1, env.action_size, device=device)
     observation = env.reset()
     done = False
-    
+    episode_reward = 0.0
     for _ in tqdm(range(cfg.max_episode_length // cfg.action_repeat)):
         belief,state,action,next_obs,reward,done= execute_one_run_with_planner(cfg,device,env,rssm,encoder,planner,action,observation,belief,state,explore=True)
         experience_replay.append(observation, reward, action.squeeze(0).cpu(), done)
+        episode_reward += reward
         observation = next_obs
         if done:
             break
 
     metrics.steps.append(env.t + metrics.last_step)
     metrics.episodes.append(metrics.last_episode + 1)
+    metrics.train_rewards.append(episode_reward)
 
 def execute_runs(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics:Metrics,device):
     global_prior = Normal(torch.zeros(cfg.batch_size, cfg.state_size, device=device), torch.ones(cfg.batch_size, cfg.state_size, device=device))  # Global prior N(0, I)
@@ -136,10 +138,48 @@ def execute_runs(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,encoder
         adam_optim.step()
         losses.append([kl_loss.item(),obs_loss.item(),reward_loss.item()])
     return losses
+
+def record_losses(metrics: Metrics, losses: list) -> None:
+    kl_vals, obs_vals, rew_vals = zip(*losses)
+    n = len(losses)
+    metrics.kl_loss.append(sum(kl_vals) / n)
+    metrics.observation_loss.append(sum(obs_vals) / n)
+    metrics.reward_loss.append(sum(rew_vals) / n)
+
+def plot_metrics(metrics: Metrics) -> None:
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig.suptitle(f'Training Metrics — Episode {metrics.last_episode}')
+
+    if metrics.kl_loss:
+        axes[0, 0].plot(metrics.kl_loss)
+        axes[0, 0].set_title('KL Loss')
+        axes[0, 0].set_xlabel('Episode')
+
+    if metrics.observation_loss:
+        axes[0, 1].plot(metrics.observation_loss)
+        axes[0, 1].set_title('Observation Loss')
+        axes[0, 1].set_xlabel('Episode')
+
+    if metrics.reward_loss:
+        axes[1, 0].plot(metrics.reward_loss)
+        axes[1, 0].set_title('Reward Loss')
+        axes[1, 0].set_xlabel('Episode')
+
+    if metrics.train_rewards:
+        axes[1, 1].plot(metrics.train_rewards)
+        axes[1, 1].set_title('Episode Reward')
+        axes[1, 1].set_xlabel('Episode')
+
+    plt.tight_layout()
+    plt.savefig('metrics.png')
+    plt.close(fig)
+
 def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env):
     for episode in tqdm(range(metrics.last_episode+1, cfg.episodes + 1), total=cfg.episodes, initial=metrics.last_episode):
-        execute_runs(cfg.collect_interval,cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device)
+        losses = execute_runs(cfg.collect_interval,cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device)
+        record_losses(metrics, losses)
         collect_with_planner(cfg,device,env,rssm,encoder,planner,experience_replay,metrics)
+        plot_metrics(metrics)
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
     device = "cuda" if not cfg.disable_cuda and torch.cuda.is_available() else "cpu"
