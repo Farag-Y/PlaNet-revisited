@@ -56,3 +56,27 @@ class ExperienceReplay():
         batch_idxs = self._get_indexes(batch_size, batch_length)
         batches = self._get_batch(batch_idxs, batch_size, batch_length)
         return batches
+
+    def save(self, path: str) -> None:
+        torch.save({
+            'observations': self.observations, 'actions': self.actions,
+            'rewards': self.rewards, 'non_terminals': self.non_terminals,
+            'idx': self.idx, 'steps': self.steps,
+            'episodes': self.episodes, 'full': self.full, 'size': self.size,
+        }, path)
+
+    @classmethod
+    def load(cls, path: str, device: str) -> 'ExperienceReplay':
+        data = torch.load(path, map_location='cpu')
+        instance = cls.__new__(cls)
+        instance.device        = device
+        instance.observations  = data['observations']
+        instance.actions       = data['actions']
+        instance.rewards       = data['rewards']
+        instance.non_terminals = data['non_terminals']
+        instance.idx           = data['idx']
+        instance.steps         = data['steps']
+        instance.episodes      = data['episodes']
+        instance.full          = data['full']
+        instance.size          = data['size']
+        return instance

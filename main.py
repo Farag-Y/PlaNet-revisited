@@ -1,3 +1,4 @@
+import os
 import torch
 import hydra
 import matplotlib.pyplot as plt
@@ -139,6 +140,29 @@ def execute_runs(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,encoder
         losses.append([kl_loss.item(),obs_loss.item(),reward_loss.item()])
     return losses
 
+def load_checkpoint(cfg, device, rssm, decoder_model, reward_model, encoder, adam_optim) -> Metrics:
+    state = torch.load(cfg.models, map_location=device)
+    rssm.load_state_dict(state['rssm'])
+    decoder_model.load_state_dict(state['decoder_model'])
+    reward_model.load_state_dict(state['reward_model'])
+    encoder.load_state_dict(state['encoder'])
+    adam_optim.load_state_dict(state['adam_optim'])
+    return Metrics.load(os.path.join(os.path.dirname(cfg.models), 'metrics.pt'))
+
+def save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics):
+    checkpoint_dir = os.path.join(hydra.utils.get_original_cwd(), 'results', f'checkpoint_{episode}')
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    torch.save({
+        'rssm':          rssm.state_dict(),
+        'decoder_model': decoder_model.state_dict(),
+        'reward_model':  reward_model.state_dict(),
+        'encoder':       encoder.state_dict(),
+        'adam_optim':    adam_optim.state_dict(),
+    }, os.path.join(checkpoint_dir, 'models.pt'))
+    metrics.save(os.path.join(checkpoint_dir, 'metrics.pt'))
+    if cfg.checkpoint_experience:
+        experience_replay.save(os.path.join(checkpoint_dir, 'experience_replay.pt'))
+
 def record_losses(metrics: Metrics, losses: list) -> None:
     kl_vals, obs_vals, rew_vals = zip(*losses)
     n = len(losses)
@@ -180,6 +204,8 @@ def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,plan
         record_losses(metrics, losses)
         collect_with_planner(cfg,device,env,rssm,encoder,planner,experience_replay,metrics)
         plot_metrics(metrics)
+        if episode % cfg.checkpoint_interval == 0:
+            save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics)
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
     device = "cuda" if not cfg.disable_cuda and torch.cuda.is_available() else "cpu"
@@ -191,9 +217,12 @@ def main(cfg: DictConfig) -> None:
         bit_depth=cfg.bit_depth,
     )
 
-    metrics = Metrics()
-    experience_replay=collect_observations(cfg,device,env,metrics)
-    rssm,decoder_model,reward_model,encoder,adam_optim,planner= initialize_models(cfg,device,env)
+    rssm,decoder_model,reward_model,encoder,adam_optim,planner = initialize_models(cfg,device,env)
+    metrics = load_checkpoint(cfg,device,rssm,decoder_model,reward_model,encoder,adam_optim) if cfg.models else Metrics()
+    experience_replay = (ExperienceReplay.load(cfg.experience_replay_path, device)
+                         if cfg.experience_replay_path
+                         else collect_observations(cfg,device,env,metrics))
+
     train(cfg,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics,device,env)
 
 
