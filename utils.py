@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-import hydra
 from omegaconf import DictConfig
 from torch import optim
 from experience_replay import ExperienceReplay
@@ -88,8 +87,8 @@ def load_checkpoint(cfg, device, rssm, decoder_model, reward_model, encoder, ada
     return Metrics.load(os.path.join(os.path.dirname(cfg.models), 'metrics.pt'))
 
 
-def save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics):
-    checkpoint_dir = os.path.join(hydra.utils.get_original_cwd(), 'results', f'checkpoint_{episode}')
+def save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics, results_dir):
+    checkpoint_dir = os.path.join(results_dir, f'checkpoint_{episode}')
     os.makedirs(checkpoint_dir, exist_ok=True)
     torch.save({
         'rssm':          rssm.state_dict(),
@@ -111,7 +110,7 @@ def record_losses(metrics: Metrics, losses: list) -> None:
     metrics.reward_loss.append(sum(rew_vals) / n)
 
 
-def plot_metrics(metrics: Metrics) -> None:
+def plot_metrics(metrics: Metrics, results_dir: str) -> None:
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     fig.suptitle(f'Training Metrics — Episode {metrics.last_episode}')
 
@@ -136,5 +135,5 @@ def plot_metrics(metrics: Metrics) -> None:
         axes[1, 1].set_xlabel('Episode')
 
     plt.tight_layout()
-    plt.savefig('metrics.png')
+    plt.savefig(os.path.join(results_dir, 'metrics.png'))
     plt.close(fig)

@@ -1,5 +1,7 @@
+import os
 import torch
 import hydra
+from datetime import datetime
 from omegaconf import DictConfig
 
 from env_wrapper import Env
@@ -74,14 +76,14 @@ def train_world_model(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,en
         losses.append([kl_loss.item(), obs_loss.item(), reward_loss.item()])
     return losses
 
-def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env):
+def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env,results_dir:str):
     for episode in tqdm(range(metrics.last_episode+1, cfg.episodes + 1), total=cfg.episodes, initial=metrics.last_episode):
         losses = train_world_model(cfg.collect_interval,cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device)
         record_losses(metrics, losses)
         collect_with_planner(cfg,device,env,rssm,encoder,planner,experience_replay,metrics)
-        plot_metrics(metrics)
+        plot_metrics(metrics, results_dir)
         if episode % cfg.checkpoint_interval == 0:
-            save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics)
+            save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics, results_dir)
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
@@ -100,7 +102,10 @@ def main(cfg: DictConfig) -> None:
                          if cfg.experience_replay_path
                          else collect_observations(cfg, device, env, metrics))
 
-    train(cfg, rssm, decoder_model, reward_model, encoder, adam_optim, planner, experience_replay, metrics, device, env)
+    results_dir = os.path.join(hydra.utils.get_original_cwd(), 'results', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+    os.makedirs(results_dir, exist_ok=True)
+
+    train(cfg, rssm, decoder_model, reward_model, encoder, adam_optim, planner, experience_replay, metrics, device, env, results_dir)
 
 
 if __name__ == "__main__":
