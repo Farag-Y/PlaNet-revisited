@@ -15,7 +15,13 @@ from torch.nn import functional as F
 from torch.distributions.kl import kl_divergence
 from utils import (model_wrapper, initialize_models, collect_observations,
                    load_checkpoint, save_checkpoint, record_losses, plot_metrics)
-
+'''
+    TODO:
+    6. Connecting everything together properly
+    8. Latent overshooting
+    9. Sampling data & losses
+    10. Reloading data from a checkpoint
+'''
 def execute_one_run_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,action,observation,belief,state,explore):
     with torch.no_grad():
         encoded = encoder(observation.to(device))
