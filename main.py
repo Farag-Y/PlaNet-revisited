@@ -54,6 +54,84 @@ def collect_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,expe
     metrics.episodes.append(metrics.last_episode + 1)
     metrics.train_rewards.append(episode_reward)
 
+def calculate_latent_overshooting(cfg, rssm, reward_model,
+                                   actions,           # [chunk_size-1, B, action_size]  — full_actions[:-1]
+                                   nonterminals,      # [chunk_size-1, B, 1]            — full_nonterminals[:-1]
+                                   posterior_states,  # [chunk_size-1, B, state_size]
+                                   posterior_means,   # [chunk_size-1, B, state_size]
+                                   posterior_std_devs,# [chunk_size-1, B, state_size]
+                                   rssm_beliefs,      # [chunk_size-1, B, belief_size]
+                                   rewards,           # [chunk_size,   B]               — full rewards
+                                   free_nats, device):
+    if cfg.overshooting_kl_beta == 0:
+        return torch.tensor(0.0, device=device)
+
+    chunk_size = actions.shape[0] + 1
+    B, state_size = posterior_states.shape[1], posterior_states.shape[2]
+
+    # Prepend t=0 (init) entries so indices match the reference exactly:
+    # beliefs_all[t] = belief at time t, for t = 0..chunk_size-1
+    init_belief = torch.zeros(1, B, rssm_beliefs.shape[2], device=device)
+    init_state  = torch.zeros(1, B, state_size, device=device)
+    beliefs_all    = torch.cat([init_belief, rssm_beliefs], dim=0)
+    post_states_all = torch.cat([init_state,  posterior_states],  dim=0)
+    post_means_all  = torch.cat([init_state,  posterior_means],   dim=0)
+    post_stds_all   = torch.cat([torch.ones_like(init_state), posterior_std_devs], dim=0)
+
+    overshooting_vars = []
+    for t in range(1, chunk_size - 1):
+        d = min(t + cfg.overshooting_distance, chunk_size - 1)
+        t_ = t - 1                                      # index offset for belief/state (which include t=0)
+        pad_len = cfg.overshooting_distance - (d - t)   # right-pad shorter sequences to uniform length
+        seq_pad = (0, 0, 0, 0, 0, pad_len)              # pads dim-0 (time) of 3-D tensors
+
+        overshooting_vars.append((
+            F.pad(actions[t:d],                              seq_pad),           # [0] actions
+            F.pad(nonterminals[t:d],                         seq_pad),           # [1] nonterminals
+            F.pad(rewards[t:d],                              seq_pad[2:]),       # [2] rewards (2-D)
+            beliefs_all[t_],                                                     # [3] starting belief
+            post_states_all[t_].detach(),                                        # [4] starting state
+            F.pad(post_means_all[t:d].detach(),              seq_pad),           # [5] target posterior means
+            F.pad(post_stds_all[t:d].detach(),               seq_pad, value=1), # [6] target posterior stds (pad with 1, not 0)
+            F.pad(torch.ones(d - t, B, state_size, device=device), seq_pad),    # [7] validity mask
+        ))
+
+    overshooting_vars = tuple(zip(*overshooting_vars))
+
+    # Single batched RSSM call across all overshooting sequences
+    prior_out = rssm(
+        torch.cat(overshooting_vars[4], dim=0),   # prev_state:   [num_seqs*B, state_size]
+        torch.cat(overshooting_vars[0], dim=1),   # actions:      [D, num_seqs*B, action_size]
+        torch.cat(overshooting_vars[3], dim=0),   # prev_belief:  [num_seqs*B, belief_size]
+        None,
+        torch.cat(overshooting_vars[1], dim=1),   # nonterminals: [D, num_seqs*B, 1]
+    )
+
+    seq_mask    = torch.cat(overshooting_vars[7], dim=1)   # [D, num_seqs*B, state_size]
+    target_means = torch.cat(overshooting_vars[5], dim=1)  # [D, num_seqs*B, state_size]
+    target_stds  = torch.cat(overshooting_vars[6], dim=1)  # [D, num_seqs*B, state_size]
+
+    # KL loss: mask out padded steps, then apply free-nats per (step, batch) cell
+    kl = (kl_divergence(
+        Normal(target_means, target_stds),
+        Normal(prior_out.prior_means, prior_out.prior_std_devs),
+    ) * seq_mask).sum(dim=2)                                # [D, num_seqs*B]
+
+    kl_loss = (1 / cfg.overshooting_distance) * cfg.overshooting_kl_beta * \
+        torch.max(kl, free_nats).mean(dim=(0, 1)) * (chunk_size - 1)
+
+    total = kl_loss
+
+    if cfg.overshooting_reward_scale != 0:
+        target_rewards = torch.cat(overshooting_vars[2], dim=1)        # [D, num_seqs*B]
+        pred_rewards   = model_wrapper(reward_model, prior_out.det_hidden_states, prior_out.prior_states, trailing_dims=1)
+        reward_mask    = seq_mask[:, :, 0]                             # [D, num_seqs*B]
+        reward_loss    = (1 / cfg.overshooting_distance) * cfg.overshooting_reward_scale * \
+            F.mse_loss(pred_rewards * reward_mask, target_rewards, reduction='none').mean(dim=(0, 1)) * (chunk_size - 1)
+        total = total + reward_loss
+
+    return total
+
 def train_world_model(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics:Metrics,device):
     free_nats = torch.full((1,), cfg.free_nats, dtype=torch.float32, device=device)
     losses = []
@@ -74,12 +152,22 @@ def train_world_model(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,en
         decoded_obs = model_wrapper(decoder_model, rssm_output.det_hidden_states, rssm_output.posterior_states, trailing_dims=1)
         obs_loss    = F.mse_loss(decoded_obs, obs[1:], reduction='none').sum((2, 3, 4)).mean()
         reward_loss = F.mse_loss(predicted_reward, rewards[1:], reduction='none').mean()
-        ##TODO: calculate latent overshooting
+        overshooting_loss = calculate_latent_overshooting(
+            cfg, rssm, reward_model,
+            actions[:-1], nonterminals[:-1],
+            rssm_output.posterior_states,
+            rssm_output.posterior_means,
+            rssm_output.posterior_std_devs,
+            rssm_output.det_hidden_states,
+            rewards,        # full rewards tensor — function slices [t:d] internally
+            free_nats,
+            device,
+        )
         adam_optim.zero_grad()
-        (kl_loss + obs_loss + reward_loss).backward()
+        (kl_loss + obs_loss + reward_loss + overshooting_loss).backward()
         nn.utils.clip_grad_norm_(adam_optim.param_groups[0]['params'], cfg.grad_clip_norm)
         adam_optim.step()
-        losses.append([kl_loss.item(), obs_loss.item(), reward_loss.item()])
+        losses.append([kl_loss.item(), obs_loss.item(), reward_loss.item(), overshooting_loss.item()])
     return losses
 
 def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env,results_dir:str):

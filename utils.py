@@ -103,11 +103,12 @@ def save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, ad
 
 
 def record_losses(metrics: Metrics, losses: list) -> None:
-    kl_vals, obs_vals, rew_vals = zip(*losses)
+    kl_vals, obs_vals, rew_vals, os_vals = zip(*losses)
     n = len(losses)
     metrics.kl_loss.append(sum(kl_vals) / n)
     metrics.observation_loss.append(sum(obs_vals) / n)
     metrics.reward_loss.append(sum(rew_vals) / n)
+    metrics.overshooting_loss.append(sum(os_vals) / n)
 
 
 def plot_metrics(metrics: Metrics, results_dir: str) -> None:

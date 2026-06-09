@@ -12,7 +12,8 @@ class Metrics:
     test_rewards:     List[List[float]] = field(default_factory=list)
     observation_loss: List[float]       = field(default_factory=list)
     reward_loss:      List[float]       = field(default_factory=list)
-    kl_loss:          List[float]       = field(default_factory=list)
+    kl_loss:              List[float]       = field(default_factory=list)
+    overshooting_loss:    List[float]       = field(default_factory=list)
 
     @property
     def last_episode(self) -> int:
