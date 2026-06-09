@@ -69,14 +69,10 @@ def calculate_latent_overshooting(cfg, rssm, reward_model,
     chunk_size = actions.shape[0] + 1
     B, state_size = posterior_states.shape[1], posterior_states.shape[2]
 
-    # Prepend t=0 (init) entries so indices match the reference exactly:
-    # beliefs_all[t] = belief at time t, for t = 0..chunk_size-1
-    init_belief = torch.zeros(1, B, rssm_beliefs.shape[2], device=device)
-    init_state  = torch.zeros(1, B, state_size, device=device)
-    beliefs_all    = torch.cat([init_belief, rssm_beliefs], dim=0)
-    post_states_all = torch.cat([init_state,  posterior_states],  dim=0)
-    post_means_all  = torch.cat([init_state,  posterior_means],   dim=0)
-    post_stds_all   = torch.cat([torch.ones_like(init_state), posterior_std_devs], dim=0)
+    beliefs_all     = rssm_beliefs        # [chunk_size-1, B, belief_size]
+    post_states_all = posterior_states    # [chunk_size-1, B, state_size]
+    post_means_all  = posterior_means     # [chunk_size-1, B, state_size]
+    post_stds_all   = posterior_std_devs  # [chunk_size-1, B, state_size]
 
     overshooting_vars = []
     for t in range(1, chunk_size - 1):
