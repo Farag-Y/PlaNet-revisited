@@ -28,4 +28,9 @@ class Metrics:
 
     @classmethod
     def load(cls, path: str) -> "Metrics":
-        return torch.load(path)
+        import numpy as np
+        import numpy.core.multiarray
+        import numpy.dtypes
+        safe = [cls, numpy.core.multiarray._reconstruct, np.ndarray, np.dtype, numpy.dtypes.Float32DType]
+        with torch.serialization.safe_globals(safe):
+            return torch.load(path, weights_only=True)

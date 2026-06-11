@@ -59,6 +59,6 @@ test_episodes: 10
 
 # Checkpointing
 checkpoint_interval: 50
-checkpoint_experience: false
+checkpoint_experience: true
 models: ""
 experience_replay_path: ""

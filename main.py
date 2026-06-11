@@ -18,9 +18,6 @@ from utils import (model_wrapper, initialize_models, collect_observations,
 '''
     TODO:
     6. Connecting everything together properly
-    8. Latent overshooting
-    9. Sampling data & losses
-    10. Reloading data from a checkpoint
 '''
 def execute_one_run_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,action,observation,belief,state,explore):
     with torch.no_grad():
@@ -54,77 +51,59 @@ def collect_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,expe
     metrics.episodes.append(metrics.last_episode + 1)
     metrics.train_rewards.append(episode_reward)
 
-def calculate_latent_overshooting(cfg, rssm, reward_model,
-                                   actions,           # [chunk_size-1, B, action_size]  — full_actions[:-1]
-                                   nonterminals,      # [chunk_size-1, B, 1]            — full_nonterminals[:-1]
-                                   posterior_states,  # [chunk_size-1, B, state_size]
-                                   posterior_means,   # [chunk_size-1, B, state_size]
-                                   posterior_std_devs,# [chunk_size-1, B, state_size]
-                                   rssm_beliefs,      # [chunk_size-1, B, belief_size]
-                                   rewards,           # [chunk_size,   B]               — full rewards
-                                   free_nats, device):
+def calculate_latent_overshooting(cfg, rssm, reward_model, actions, nonterminals,
+                                   posterior_states, posterior_means, posterior_std_devs,
+                                   rssm_beliefs, rewards, free_nats, device):
     if cfg.overshooting_kl_beta == 0:
         return torch.tensor(0.0, device=device)
 
     chunk_size = actions.shape[0] + 1
     B, state_size = posterior_states.shape[1], posterior_states.shape[2]
 
-    beliefs_all     = rssm_beliefs        # [chunk_size-1, B, belief_size]
-    post_states_all = posterior_states    # [chunk_size-1, B, state_size]
-    post_means_all  = posterior_means     # [chunk_size-1, B, state_size]
-    post_stds_all   = posterior_std_devs  # [chunk_size-1, B, state_size]
-
     overshooting_vars = []
     for t in range(1, chunk_size - 1):
         d = min(t + cfg.overshooting_distance, chunk_size - 1)
-        t_ = t - 1                                      # index offset for belief/state (which include t=0)
-        pad_len = cfg.overshooting_distance - (d - t)   # right-pad shorter sequences to uniform length
-        seq_pad = (0, 0, 0, 0, 0, pad_len)              # pads dim-0 (time) of 3-D tensors
-
+        t_ = t - 1
+        pad_len = cfg.overshooting_distance - (d - t)
+        seq_pad = (0, 0, 0, 0, 0, pad_len)
         overshooting_vars.append((
-            F.pad(actions[t:d],                              seq_pad),           # [0] actions
-            F.pad(nonterminals[t:d],                         seq_pad),           # [1] nonterminals
-            F.pad(rewards[t:d],                              seq_pad[2:]),       # [2] rewards (2-D)
-            beliefs_all[t_],                                                     # [3] starting belief
-            post_states_all[t_].detach(),                                        # [4] starting state
-            F.pad(post_means_all[t:d].detach(),              seq_pad),           # [5] target posterior means
-            F.pad(post_stds_all[t:d].detach(),               seq_pad, value=1), # [6] target posterior stds (pad with 1, not 0)
-            F.pad(torch.ones(d - t, B, state_size, device=device), seq_pad),    # [7] validity mask
+            F.pad(actions[t:d], seq_pad),
+            F.pad(nonterminals[t:d], seq_pad),
+            F.pad(rewards[t:d], seq_pad[2:]),
+            rssm_beliefs[t_],
+            posterior_states[t_].detach(),
+            F.pad(posterior_means[t:d].detach(), seq_pad),
+            F.pad(posterior_std_devs[t:d].detach(), seq_pad, value=1),
+            F.pad(torch.ones(d - t, B, state_size, device=device), seq_pad),
         ))
 
     overshooting_vars = tuple(zip(*overshooting_vars))
 
-    # Single batched RSSM call across all overshooting sequences
     prior_out = rssm(
-        torch.cat(overshooting_vars[4], dim=0),   # prev_state:   [num_seqs*B, state_size]
-        torch.cat(overshooting_vars[0], dim=1),   # actions:      [D, num_seqs*B, action_size]
-        torch.cat(overshooting_vars[3], dim=0),   # prev_belief:  [num_seqs*B, belief_size]
+        torch.cat(overshooting_vars[4], dim=0),
+        torch.cat(overshooting_vars[0], dim=1),
+        torch.cat(overshooting_vars[3], dim=0),
         None,
-        torch.cat(overshooting_vars[1], dim=1),   # nonterminals: [D, num_seqs*B, 1]
+        torch.cat(overshooting_vars[1], dim=1),
     )
 
-    seq_mask    = torch.cat(overshooting_vars[7], dim=1)   # [D, num_seqs*B, state_size]
-    target_means = torch.cat(overshooting_vars[5], dim=1)  # [D, num_seqs*B, state_size]
-    target_stds  = torch.cat(overshooting_vars[6], dim=1)  # [D, num_seqs*B, state_size]
+    seq_mask     = torch.cat(overshooting_vars[7], dim=1)
+    target_means = torch.cat(overshooting_vars[5], dim=1)
+    target_stds  = torch.cat(overshooting_vars[6], dim=1)
 
-    # KL loss: mask out padded steps, then apply free-nats per (step, batch) cell
     kl = (kl_divergence(
         Normal(target_means, target_stds),
         Normal(prior_out.prior_means, prior_out.prior_std_devs),
-    ) * seq_mask).sum(dim=2)                                # [D, num_seqs*B]
-
-    kl_loss = (1 / cfg.overshooting_distance) * cfg.overshooting_kl_beta * \
+    ) * seq_mask).sum(dim=2)
+    total = (1 / cfg.overshooting_distance) * cfg.overshooting_kl_beta * \
         torch.max(kl, free_nats).mean(dim=(0, 1)) * (chunk_size - 1)
 
-    total = kl_loss
-
     if cfg.overshooting_reward_scale != 0:
-        target_rewards = torch.cat(overshooting_vars[2], dim=1)        # [D, num_seqs*B]
-        pred_rewards   = model_wrapper(reward_model, prior_out.det_hidden_states, prior_out.prior_states, trailing_dims=1)
-        reward_mask    = seq_mask[:, :, 0]                             # [D, num_seqs*B]
-        reward_loss    = (1 / cfg.overshooting_distance) * cfg.overshooting_reward_scale * \
+        target_rewards = torch.cat(overshooting_vars[2], dim=1)
+        pred_rewards = model_wrapper(reward_model, prior_out.det_hidden_states, prior_out.prior_states, trailing_dims=1)
+        reward_mask = seq_mask[:, :, 0]
+        total = total + (1 / cfg.overshooting_distance) * cfg.overshooting_reward_scale * \
             F.mse_loss(pred_rewards * reward_mask, target_rewards, reduction='none').mean(dim=(0, 1)) * (chunk_size - 1)
-        total = total + reward_loss
 
     return total
 

@@ -67,7 +67,14 @@ class ExperienceReplay():
 
     @classmethod
     def load(cls, path: str, device: str) -> 'ExperienceReplay':
-        data = torch.load(path, map_location='cpu')
+        import numpy.core.multiarray
+        safe = [
+            numpy.core.multiarray._reconstruct,
+            np.ndarray,
+            np.dtype,
+        ]
+        with torch.serialization.safe_globals(safe):
+            data = torch.load(path, map_location='cpu', weights_only=True)
         instance = cls.__new__(cls)
         instance.device        = device
         instance.observations  = data['observations']
