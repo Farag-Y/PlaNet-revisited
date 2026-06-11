@@ -84,7 +84,7 @@ def calculate_latent_overshooting(cfg, rssm, reward_model,
         overshooting_vars.append((
             F.pad(actions[t:d],                              seq_pad),           # [0] actions
             F.pad(nonterminals[t:d],                         seq_pad),           # [1] nonterminals
-            F.pad(rewards[t+1:d+1],                          seq_pad[2:]),       # [2] rewards (2-D)
+            F.pad(rewards[t:d],                              seq_pad[2:]),       # [2] rewards (2-D)
             beliefs_all[t_],                                                     # [3] starting belief
             post_states_all[t_].detach(),                                        # [4] starting state
             F.pad(post_means_all[t:d].detach(),              seq_pad),           # [5] target posterior means
@@ -147,7 +147,7 @@ def train_world_model(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,en
 
         decoded_obs = model_wrapper(decoder_model, rssm_output.det_hidden_states, rssm_output.posterior_states, trailing_dims=1)
         obs_loss    = F.mse_loss(decoded_obs, obs[1:], reduction='none').sum((2, 3, 4)).mean()
-        reward_loss = F.mse_loss(predicted_reward, rewards[1:], reduction='none').mean()
+        reward_loss = F.mse_loss(predicted_reward, rewards[:-1], reduction='none').mean()
         overshooting_loss = calculate_latent_overshooting(
             cfg, rssm, reward_model,
             actions[:-1], nonterminals[:-1],
