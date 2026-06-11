@@ -35,9 +35,9 @@ def initialize_models(cfg: DictConfig, device: str, env):
         obs_size=cfg.embedding_size,
         non_linearity=cfg.activation_function,
     ).to(device=device)
-    decoder_model = ObservationModel(belief_size=cfg.belief_size, state_size=cfg.state_size, embedding_size=cfg.embedding_size)
-    reward_model = RewardModel(belief_size=cfg.belief_size, state_size=cfg.state_size, hidden_size=cfg.hidden_size)
-    encoder = Encoder(embedding_size=cfg.embedding_size)
+    decoder_model = ObservationModel(belief_size=cfg.belief_size, state_size=cfg.state_size, embedding_size=cfg.embedding_size).to(device=device)
+    reward_model = RewardModel(belief_size=cfg.belief_size, state_size=cfg.state_size, hidden_size=cfg.hidden_size).to(device=device)
+    encoder = Encoder(embedding_size=cfg.embedding_size).to(device=device)
     parameter_list = list(rssm.parameters()) + list(decoder_model.parameters()) + list(reward_model.parameters()) + list(encoder.parameters())
     adam_optim = optim.Adam(parameter_list, lr=cfg.learning_rate, eps=cfg.adam_epsilon)
     min_action, max_action = env.action_range
@@ -61,6 +61,7 @@ def collect_observations(cfg: DictConfig, device: str, env, metrics: Metrics) ->
         observation_size=0,
         image_shape=list(env.observation_size),
         action_size=env.action_size,
+        bit_depth=cfg.bit_depth,
         device=device,
     )
     for s in range(1, cfg.seed_episodes + 1):
@@ -72,8 +73,7 @@ def collect_observations(cfg: DictConfig, device: str, env, metrics: Metrics) ->
             experience_replay.append(observation, reward, action, done)
             observation = next_obs
         metrics.steps.append(env.t + metrics.last_step)
-        metrics.episodes.append(s)
-    env.close()
+        metrics.episodes.append(metrics.last_episode + 1)
     return experience_replay
 
 
@@ -112,7 +112,7 @@ def record_losses(metrics: Metrics, losses: list) -> None:
 
 
 def plot_metrics(metrics: Metrics, results_dir: str) -> None:
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig, axes = plt.subplots(2, 3, figsize=(18, 8))
     fig.suptitle(f'Training Metrics — Episode {metrics.last_episode}')
 
     if metrics.kl_loss:
@@ -126,14 +126,21 @@ def plot_metrics(metrics: Metrics, results_dir: str) -> None:
         axes[0, 1].set_xlabel('Episode')
 
     if metrics.reward_loss:
-        axes[1, 0].plot(metrics.reward_loss)
-        axes[1, 0].set_title('Reward Loss')
+        axes[0, 2].plot(metrics.reward_loss)
+        axes[0, 2].set_title('Reward Loss')
+        axes[0, 2].set_xlabel('Episode')
+
+    if metrics.overshooting_loss:
+        axes[1, 0].plot(metrics.overshooting_loss)
+        axes[1, 0].set_title('Overshooting Loss')
         axes[1, 0].set_xlabel('Episode')
 
     if metrics.train_rewards:
         axes[1, 1].plot(metrics.train_rewards)
         axes[1, 1].set_title('Episode Reward')
         axes[1, 1].set_xlabel('Episode')
+
+    axes[1, 2].axis('off')
 
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir, 'metrics.png'))
