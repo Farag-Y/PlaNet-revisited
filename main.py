@@ -18,7 +18,10 @@ from utils import (model_wrapper, initialize_models, collect_observations,
                    load_checkpoint, save_checkpoint, record_losses, plot_metrics)
 '''
     TODO:
-    6. Connecting everything together properly
+    1. Good overshooting hyper params
+    2. Test Phase of modle
+    3. Replication of 3 environments and comparing them to paper's results
+   
 '''
 def execute_one_run_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,action,observation,belief,state,explore):
     with torch.no_grad():
