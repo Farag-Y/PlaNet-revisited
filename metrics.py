@@ -31,6 +31,7 @@ class Metrics:
         import numpy as np
         import numpy.core.multiarray
         import numpy.dtypes
-        safe = [cls, numpy.core.multiarray._reconstruct, np.ndarray, np.dtype, numpy.dtypes.Float32DType]
+        safe = [cls, numpy.core.multiarray._reconstruct, numpy.core.multiarray.scalar,
+                np.ndarray, np.dtype, numpy.dtypes.Float32DType, numpy.dtypes.Float64DType]
         with torch.serialization.safe_globals(safe):
             return torch.load(path, weights_only=True)

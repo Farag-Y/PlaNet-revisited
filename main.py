@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import torch
 import hydra
 from datetime import datetime
@@ -30,7 +31,7 @@ def execute_one_run_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,plan
         if explore:
             action = (action + cfg.action_noise * torch.randn_like(action))
         action = action.clamp(planner.min_action, planner.max_action)
-        next_obs, reward, done = env.step(action.cpu())
+        next_obs, reward, done = env.step(action[0].cpu())
     return belief, state, action, next_obs, reward, done
 
 def collect_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,experience_replay:ExperienceReplay,metrics:Metrics):
@@ -156,6 +157,8 @@ def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,plan
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
+    np.random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
     device = "cuda" if not cfg.disable_cuda and torch.cuda.is_available() else "cpu"
     env = Env(
         cfg.env,
@@ -175,6 +178,7 @@ def main(cfg: DictConfig) -> None:
     os.makedirs(results_dir, exist_ok=True)
 
     train(cfg, rssm, decoder_model, reward_model, encoder, adam_optim, planner, experience_replay, metrics, device, env, results_dir)
+    env.close()
 
 
 if __name__ == "__main__":
