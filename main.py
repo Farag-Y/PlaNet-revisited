@@ -149,6 +149,30 @@ def train_world_model(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,en
         losses.append([kl_loss.item(), obs_loss.item(), reward_loss.item(), overshooting_loss.item()])
     return losses
 
+def test(cfg: DictConfig, rssm, reward_model, encoder, planner, device, env):
+    rssm.eval()
+    reward_model.eval()
+    encoder.eval()
+
+    total_reward = 0.0
+    with torch.no_grad():
+        for _ in tqdm(range(cfg.test_episodes), desc="Testing"):
+            observation = env.reset()
+            belief = torch.zeros(1, cfg.belief_size, device=device)
+            state  = torch.zeros(1, cfg.state_size,  device=device)
+            action = torch.zeros(1, env.action_size,  device=device)
+            for _ in tqdm(range(cfg.max_episode_length // cfg.action_repeat), desc="Episode", leave=False):
+                belief, state, action, observation, reward, done = execute_one_run_with_planner(
+                    cfg, device, env, rssm, encoder, planner, action, observation, belief, state, explore=False)
+                total_reward += reward
+                if cfg.render:
+                    env.render()
+                if done:
+                    break
+
+    print(f"Average Reward: {total_reward / cfg.test_episodes:.2f}")
+
+
 def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env,results_dir:str):
     for episode in tqdm(range(metrics.last_episode+1, cfg.episodes + 1), total=cfg.episodes, initial=metrics.last_episode):
         losses = train_world_model(cfg.collect_interval,cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device)
@@ -160,6 +184,9 @@ def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,plan
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
+    if cfg.test and not cfg.models:
+        raise ValueError("Test mode requires a checkpoint: set cfg.models to a checkpoint path.")
+
     np.random.seed(cfg.seed)
     torch.manual_seed(cfg.seed)
     device = "cuda" if not cfg.disable_cuda and torch.cuda.is_available() else "cpu"
@@ -173,14 +200,17 @@ def main(cfg: DictConfig) -> None:
 
     rssm, decoder_model, reward_model, encoder, adam_optim, planner = initialize_models(cfg, device, env)
     metrics = load_checkpoint(cfg, device, rssm, decoder_model, reward_model, encoder, adam_optim) if cfg.models else Metrics()
-    experience_replay = (ExperienceReplay.load(cfg.experience_replay_path, device)
-                         if cfg.experience_replay_path
-                         else collect_observations(cfg, device, env, metrics))
 
-    results_dir = os.path.join(hydra.utils.get_original_cwd(), 'results', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
-    os.makedirs(results_dir, exist_ok=True)
+    if cfg.test:
+        test(cfg, rssm, reward_model, encoder, planner, device, env)
+    else:
+        experience_replay = (ExperienceReplay.load(cfg.experience_replay_path, device)
+                             if cfg.experience_replay_path
+                             else collect_observations(cfg, device, env, metrics))
+        results_dir = os.path.join(hydra.utils.get_original_cwd(), 'results', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+        os.makedirs(results_dir, exist_ok=True)
+        train(cfg, rssm, decoder_model, reward_model, encoder, adam_optim, planner, experience_replay, metrics, device, env, results_dir)
 
-    train(cfg, rssm, decoder_model, reward_model, encoder, adam_optim, planner, experience_replay, metrics, device, env, results_dir)
     env.close()
 
 
