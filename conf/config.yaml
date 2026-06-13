@@ -3,7 +3,7 @@ id: default
 seed: 1
 
 # Environment
-env: cartpole-balance
+env: cheetah-run
 symbolic_env: false
 max_episode_length: 1000
 action_repeat: 8 ##Recommended action repeats : Cartpole balance : 8, Cheetah: 4, ball_in_cup: 6

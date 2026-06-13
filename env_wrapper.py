@@ -46,6 +46,9 @@ class BaseEnv(abc.ABC):
     @abc.abstractmethod
     def sample_random_action(self): ...
 
+    @abc.abstractmethod
+    def render_frame(self, height: int = 480, width: int = 480) -> np.ndarray: ...
+
 
 class GymEnv(BaseEnv):
     def __init__(self, env, seed, max_episode_length, action_repeat, bit_depth):
@@ -100,6 +103,10 @@ class GymEnv(BaseEnv):
     def sample_random_action(self):
         return torch.from_numpy(self._env.action_space.sample())
 
+    def render_frame(self, height: int = 480, width: int = 480) -> np.ndarray:
+        frame = self._env.render()
+        return cv2.resize(frame, (width, height), interpolation=cv2.INTER_LINEAR)
+
 
 class DMControlEnv(BaseEnv):
     def __init__(self, env, seed, max_episode_length, action_repeat, bit_depth):
@@ -114,6 +121,7 @@ class DMControlEnv(BaseEnv):
         model = self._env.physics.model.ptr
         self._obs_renderer  = mujoco.Renderer(model, height=64,  width=64)
         self._disp_renderer = mujoco.Renderer(model, height=240, width=320)
+        self._play_renderer = mujoco.Renderer(model, height=480, width=480)
 
     def _render_obs(self):
         self._obs_renderer.update_scene(self._env.physics.data.ptr)
@@ -142,9 +150,17 @@ class DMControlEnv(BaseEnv):
         cv2.imshow('screen', frame[:, :, ::-1])
         cv2.waitKey(1)
 
+    def render_frame(self, height: int = 480, width: int = 480) -> np.ndarray:
+        self._play_renderer.update_scene(self._env.physics.data.ptr)
+        frame = self._play_renderer.render()
+        if frame.shape[0] != height or frame.shape[1] != width:
+            frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_LINEAR)
+        return frame
+
     def close(self):
         self._obs_renderer.close()
         self._disp_renderer.close()
+        self._play_renderer.close()
         self._env.close()
 
     @property
