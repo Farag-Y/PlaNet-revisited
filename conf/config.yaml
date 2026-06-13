@@ -3,17 +3,17 @@ id: default
 seed: 1
 
 # Environment
-env: CartPole-v1
+env: cartpole-balance
 symbolic_env: false
 max_episode_length: 1000
-action_repeat: 2
+action_repeat: 8 ##Recommended action repeats : Cartpole balance : 8, Cheetah: 4, ball_in_cup: 6
 bit_depth: 5
 render: false
 
 # Training
 episodes: 1000
 seed_episodes: 5
-collect_interval: 10 #TODO: Should be 100
+collect_interval: 100 
 batch_size: 50
 chunk_size: 50
 experience_size: 100000

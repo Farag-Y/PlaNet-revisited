@@ -27,6 +27,7 @@ This repo re-implements PlaNet from scratch in 2026 as a learning exercise. Goal
 - Modern Python tooling: [uv](https://docs.astral.sh/uv/) for environment management, [Hydra](https://hydra.cc) for configuration.
 - Modular layout: each model component (RSSM, observation model, reward model) lives in its own file under `models/`.
 - Uses `gymnasium` (the maintained fork of OpenAI Gym) instead of the original `gym`.
+- Supports `dm_control` environments (the suite used in the original paper) alongside gymnasium.
 
 It does **not** aim to reproduce the exact benchmark numbers from the paper.
 
@@ -42,7 +43,7 @@ PlaNet-revisited/
 │   ├── rssm.py            # Recurrent State Space Model
 │   ├── observation_model.py
 │   └── reward_model.py
-├── env_wrapper.py          # Gymnasium wrapper (image preprocessing)
+├── env_wrapper.py          # Gymnasium + dm_control wrappers (image preprocessing)
 ├── experience_replay.py    # Replay buffer
 ├── main.py                 # Training entry point
 └── utils.py
@@ -52,7 +53,7 @@ PlaNet-revisited/
 
 ## Installation
 
-**Requirements:** Python 3.9+, [uv](https://docs.astral.sh/uv/)
+**Requirements:** Python 3.11+, [uv](https://docs.astral.sh/uv/)
 
 ```bash
 # Install uv if needed
@@ -75,6 +76,38 @@ Override any config value inline:
 ```bash
 uv run python main.py env=HalfCheetah-v5 seed=42
 ```
+
+---
+
+## Environments
+
+Two environment families are supported. Set `env` in `conf/config.yaml` or via the command line.
+
+**Gymnasium** — install with `uv sync` (included by default):
+
+| Category | Examples |
+|---|---|
+| Classic Control | `Pendulum-v1`, `MountainCarContinuous-v0` |
+| Box2D | `BipedalWalker-v3`, `CarRacing-v3` |
+| MuJoCo | `HalfCheetah-v5`, `Hopper-v5`, `Walker2d-v5`, ... |
+
+**dm_control** — also included by default. These are the environments used in the original PlaNet paper:
+
+| Environment | dm_control task |
+|---|---|
+| `cartpole-swingup` | Cartpole swingup from hanging position |
+| `finger-spin` | Robotic finger spinning a body |
+| `cheetah-run` | Half-cheetah running |
+| `reacher-easy` | 2-link arm reaching |
+| `cup-catch` | Ball-in-cup |
+| `walker-walk` | Bipedal walker |
+
+```bash
+uv run python main.py env=cartpole-swingup
+uv run python main.py env=finger-spin
+```
+
+> **macOS note:** dm_control rendering uses mujoco's native CGL renderer and does not require a system OpenGL installation.
 
 ---
 

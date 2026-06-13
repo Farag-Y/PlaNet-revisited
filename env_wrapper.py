@@ -104,17 +104,25 @@ class GymEnv(BaseEnv):
 class DMControlEnv(BaseEnv):
     def __init__(self, env, seed, max_episode_length, action_repeat, bit_depth):
         from dm_control import suite
+        import mujoco
         domain, *task_parts = env.split('-')
         task = '_'.join(task_parts)
         self._env = suite.load(domain, task, task_kwargs={'random': seed})
         self.max_episode_length = max_episode_length
         self.action_repeat = action_repeat
         self.bit_depth = bit_depth
+        model = self._env.physics.model.ptr
+        self._obs_renderer  = mujoco.Renderer(model, height=64,  width=64)
+        self._disp_renderer = mujoco.Renderer(model, height=240, width=320)
+
+    def _render_obs(self):
+        self._obs_renderer.update_scene(self._env.physics.data.ptr)
+        return self._obs_renderer.render()
 
     def reset(self):
         self.t = 0
         self._env.reset()
-        return self._images_to_observation(self._env.physics.render(64, 64, camera_id=0), self.bit_depth)
+        return self._images_to_observation(self._render_obs(), self.bit_depth)
 
     def step(self, action):
         action = action.detach().numpy()
@@ -126,16 +134,17 @@ class DMControlEnv(BaseEnv):
             done = time_step.last() or self.t == self.max_episode_length
             if done:
                 break
-        observation = self._images_to_observation(self._env.physics.render(64, 64, camera_id=0), self.bit_depth)
-        return observation, float(reward), done
+        return self._images_to_observation(self._render_obs(), self.bit_depth), float(reward), done
 
     def render(self):
-        frame = self._env.physics.render(240, 320, camera_id=0)
-        if frame is not None:
-            cv2.imshow('screen', frame[:, :, ::-1])
-            cv2.waitKey(1)
+        self._disp_renderer.update_scene(self._env.physics.data.ptr)
+        frame = self._disp_renderer.render()
+        cv2.imshow('screen', frame[:, :, ::-1])
+        cv2.waitKey(1)
 
     def close(self):
+        self._obs_renderer.close()
+        self._disp_renderer.close()
         self._env.close()
 
     @property
