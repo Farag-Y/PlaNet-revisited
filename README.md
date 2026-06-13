@@ -111,6 +111,28 @@ uv run python main.py env=finger-spin
 
 ---
 
+## Playing Environments Manually
+
+`play.py` lets you control any supported environment yourself using the keyboard. Useful for getting a feel for an environment before training.
+
+```bash
+uv run python play.py env=Pendulum-v1
+uv run python play.py env=cartpole-swingup
+```
+
+A pygame window opens showing the environment at full resolution. Key bindings are displayed as an overlay at the bottom of the window and printed to the terminal on startup. Up to 4 action dimensions are mapped:
+
+| Keys | Action dim |
+|---|---|
+| `←` / `→` | action\[0\] |
+| `↑` / `↓` | action\[1\] |
+| `A` / `D` | action\[2\] |
+| `W` / `S` | action\[3\] |
+
+Hold a key to push the action to its maximum; release to return to zero. `R` resets the episode, `Q` quits.
+
+---
+
 ## References
 
 - [Learning Latent Dynamics for Planning from Pixels](https://arxiv.org/abs/1811.04551) — Hafner et al., 2019
