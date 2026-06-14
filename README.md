@@ -133,6 +133,81 @@ Hold a key to push the action to its maximum; release to return to zero. `R` res
 
 ---
 
+## Training on Vast.ai
+
+`scripts/train_vastai.sh` is an interactive helper that rents a GPU on [Vast.ai](https://vast.ai), uploads the project, runs training, streams logs, and **automatically destroys the instance** when training finishes.
+
+### Prerequisites
+
+1. Install the Vast.ai CLI (requires the `vastai` dependency group):
+
+   ```bash
+   uv sync --group vastai
+   ```
+
+2. Authenticate:
+
+   ```bash
+   vastai set api-key <YOUR_KEY>
+   ```
+
+   Get your key at <https://cloud.vast.ai/account/>.
+
+3. Add your API key to `.env` in the project root (see [`.env.example`](.env.example)):
+
+   ```
+   VAST_API_KEY=<your_key>
+   ```
+
+   The key is baked into the remote runner so the instance can self-destruct via the API when training ends.
+
+### Usage
+
+```bash
+bash scripts/train_vastai.sh
+```
+
+The script walks you through four interactive prompts:
+
+| Prompt | Options |
+|---|---|
+| GPU type | RTX 4090, RTX 3090, RTX 3060, A100, H100, A6000 |
+| CUDA version | 12.1 or 12.4 (both use PyTorch 2.4 images) |
+| Entrypoint | full training run or evaluation only |
+| Extra Hydra overrides | e.g. `env=HalfCheetah-v5 seed=42` |
+| Max price per hour | e.g. `0.50` |
+
+It then lists up to 10 matching offers (sorted by price) and lets you pick one. A confirmation prompt is shown before any money is spent.
+
+Pass `--auto` to skip the offer picker and confirmation and use the cheapest match:
+
+```bash
+bash scripts/train_vastai.sh --auto
+```
+
+### What it does (step by step)
+
+1. **Preflight** — checks that `vastai` CLI is installed and authenticated, and that `VAST_API_KEY` is set in `.env`.
+2. **Search offers** — queries Vast.ai for rentable instances matching your GPU, CUDA, and price constraints.
+3. **Create instance** — provisions the selected offer with 50 GB disk and SSH access using the chosen PyTorch Docker image.
+4. **Wait for boot** — polls until the instance status is `running` (5-minute timeout).
+5. **Upload code** — rsyncs the project to `/workspace/` on the instance, excluding `.git/`, `outputs/`, `results/`, and caches.
+6. **Install deps** — installs system OpenGL/EGL libraries needed by MuJoCo/dm-control, then runs `uv sync` on the instance.
+7. **Upload runner** — generates `remote_run.sh` with your entrypoint and Hydra overrides baked in; it calls the Vast.ai API to destroy the instance when the run exits.
+8. **Launch detached** — starts training via `nohup` so it survives SSH disconnects.
+9. **Stream logs** — tails `/workspace/training.log` live. Press `Ctrl-C` to detach — training continues server-side and the instance self-destructs when done.
+
+To reconnect to a running instance after detaching:
+
+```bash
+ssh -p <PORT> -o StrictHostKeyChecking=no root@<HOST>
+tail -f /workspace/training.log
+```
+
+The reconnect command is printed when you detach.
+
+---
+
 ## References
 
 - [Learning Latent Dynamics for Planning from Pixels](https://arxiv.org/abs/1811.04551) — Hafner et al., 2019

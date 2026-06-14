@@ -3,7 +3,7 @@ id: default
 seed: 1
 
 # Environment
-env: cheetah-run
+env: cartpole-balance
 symbolic_env: false
 max_episode_length: 1000
 action_repeat: 8 ##Recommended action repeats : Cartpole balance : 8, Cheetah: 4, ball_in_cup: 6
@@ -13,7 +13,7 @@ render: false
 # Training
 episodes: 1000
 seed_episodes: 5
-collect_interval: 100 
+collect_interval: 100
 batch_size: 50
 chunk_size: 50
 experience_size: 100000
@@ -33,8 +33,8 @@ grad_clip_norm: 1000
 
 # Overshooting
 overshooting_distance: 50
-overshooting_kl_beta: 1.0
-overshooting_reward_scale: 1.0
+overshooting_kl_beta: 0
+overshooting_reward_scale: 0
 
 # Losses
 global_kl_beta: 0.0
@@ -58,7 +58,7 @@ test_interval: 25
 test_episodes: 10
 
 # Checkpointing
-checkpoint_interval: 50
+checkpoint_interval: 25
 checkpoint_experience: true
 models: ""
 experience_replay_path: ""
