@@ -1,4 +1,5 @@
 import os
+import cv2
 import numpy as np
 import torch
 import hydra
@@ -15,11 +16,11 @@ from tqdm import tqdm
 from torch.nn import functional as F
 from torch.distributions.kl import kl_divergence
 from utils import (model_wrapper, initialize_models, collect_observations,
-                   load_checkpoint, save_checkpoint, record_losses, plot_metrics)
+                   load_checkpoint, save_checkpoint, record_losses, plot_metrics, write_video)
 '''
     TODO:
     1. Good overshooting hyper params
-    2. Test Phase of modle
+    2. Test Phase of model
     3. Replication of 3 environments and comparing them to paper's results
    
 '''
@@ -127,7 +128,7 @@ def train_world_model(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,en
             Normal(rssm_output.prior_means,     rssm_output.prior_std_devs),
         ).sum(dim=-1)
         kl_loss = torch.max(kl_div, free_nats).mean()
-
+        #TODO: KL Beta ? 
         decoded_obs = model_wrapper(decoder_model, rssm_output.det_hidden_states, rssm_output.posterior_states, trailing_dims=1)
         obs_loss    = F.mse_loss(decoded_obs, obs[1:], reduction='none').sum((2, 3, 4)).mean()
         reward_loss = F.mse_loss(predicted_reward, rewards[:-1], reduction='none').mean()
@@ -149,28 +150,40 @@ def train_world_model(runs:int,cfg:DictConfig,rssm,decoder_model,reward_model,en
         losses.append([kl_loss.item(), obs_loss.item(), reward_loss.item(), overshooting_loss.item()])
     return losses
 
-def test(cfg: DictConfig, rssm, reward_model, encoder, planner, device, env):
-    rssm.eval()
-    reward_model.eval()
-    encoder.eval()
+def _run_test_episode(cfg, device, env, rssm, encoder, planner):
+    observation = env.reset()
+    belief = torch.zeros(1, cfg.belief_size, device=device)
+    state  = torch.zeros(1, cfg.state_size,  device=device)
+    action = torch.zeros(1, env.action_size,  device=device)
+    episode_reward, frames = 0.0, []
+    for _ in range(cfg.max_episode_length // cfg.action_repeat):
+        belief, state, action, observation, reward, done = execute_one_run_with_planner(
+            cfg, device, env, rssm, encoder, planner, action, observation, belief, state, explore=False)
+        episode_reward += reward
+        frames.append(env.render_frame())
+        if done:
+            break
+    return episode_reward, frames
 
-    total_reward = 0.0
+
+def test(cfg: DictConfig, rssm, reward_model, encoder, planner, device, env,
+         metrics: Metrics, results_dir: str, episode: int = 0):
+    rssm.eval(); reward_model.eval(); encoder.eval()
+    episode_rewards, pad = [], len(str(cfg.test_episodes))
     with torch.no_grad():
-        for _ in tqdm(range(cfg.test_episodes), desc="Testing"):
-            observation = env.reset()
-            belief = torch.zeros(1, cfg.belief_size, device=device)
-            state  = torch.zeros(1, cfg.state_size,  device=device)
-            action = torch.zeros(1, env.action_size,  device=device)
-            for _ in tqdm(range(cfg.max_episode_length // cfg.action_repeat), desc="Episode", leave=False):
-                belief, state, action, observation, reward, done = execute_one_run_with_planner(
-                    cfg, device, env, rssm, encoder, planner, action, observation, belief, state, explore=False)
-                total_reward += reward
-                if cfg.render:
-                    env.render()
-                if done:
-                    break
+        for ep_idx in tqdm(range(cfg.test_episodes), desc="Testing"):
+            reward, frames = _run_test_episode(cfg, device, env, rssm, encoder, planner)
+            episode_rewards.append(reward)
+            ep_str = str(ep_idx).zfill(pad)
+            write_video(frames, f'test_episode_{ep_str}', results_dir)
+            cv2.imwrite(os.path.join(results_dir, f'test_episode_{ep_str}.png'),
+                        frames[-1][:, :, ::-1])
 
-    print(f"Average Reward: {total_reward / cfg.test_episodes:.2f}")
+    metrics.test_episodes.append(episode)
+    metrics.test_rewards.append(episode_rewards)
+    print(f"Average Test Reward: {sum(episode_rewards) / len(episode_rewards):.2f}")
+    plot_metrics(metrics, results_dir)
+    metrics.save(os.path.join(results_dir, 'metrics.pt'))
 
 
 def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env,results_dir:str):
@@ -202,7 +215,10 @@ def main(cfg: DictConfig) -> None:
     metrics = load_checkpoint(cfg, device, rssm, decoder_model, reward_model, encoder, adam_optim) if cfg.models else Metrics()
 
     if cfg.test:
-        test(cfg, rssm, reward_model, encoder, planner, device, env)
+        results_dir = os.path.join(hydra.utils.get_original_cwd(), 'results', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+        os.makedirs(results_dir, exist_ok=True)
+        test(cfg, rssm, reward_model, encoder, planner, device, env,
+             metrics, results_dir, episode=metrics.last_episode)
     else:
         experience_replay = (ExperienceReplay.load(cfg.experience_replay_path, device)
                              if cfg.experience_replay_path

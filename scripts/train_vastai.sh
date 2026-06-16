@@ -296,7 +296,23 @@ echo ""
 
 # Local cleanup trap: fires if this script crashes before nohup is launched
 _INSTANCE_STARTED=false
-trap '[[ "$_INSTANCE_STARTED" == "false" ]] && echo "Cleaning up instance $INSTANCE_ID..." && vastai destroy instance "$INSTANCE_ID" 2>/dev/null || true' EXIT
+_cleanup_instance() {
+  [[ "$_INSTANCE_STARTED" == "true" ]] && return 0
+  [[ -z "${INSTANCE_ID:-}" ]] && return 0
+  echo "Cleaning up instance $INSTANCE_ID..."
+  if vastai destroy instance "$INSTANCE_ID" --yes; then
+    echo "Instance $INSTANCE_ID destroyed."
+  else
+    echo "vastai CLI destroy failed, retrying via API..."
+    if curl -sf -X DELETE "https://console.vast.ai/api/v0/instances/${INSTANCE_ID}/" \
+        -H "Authorization: Bearer ${VASTAI_API_KEY}"; then
+      echo "Instance $INSTANCE_ID destroyed via API."
+    else
+      echo "WARNING: Failed to destroy instance $INSTANCE_ID — please remove it manually at https://cloud.vast.ai/"
+    fi
+  fi
+}
+trap '_cleanup_instance' EXIT
 
 # ─── Step 4: Wait for instance to be running ──────────────────────────────────
 echo "Waiting for instance to start (timeout: 5 min)..."
@@ -329,20 +345,46 @@ print(match.get('actual_status', ''))
   ELAPSED=$(( ELAPSED + 10 ))
 done
 
+# ─── Step 4b: Wait for SSH to be reachable ────────────────────────────────────
+# vastai ssh-url returns either "ssh://user@host:PORT" or "ssh user@host -p PORT"
+SSH_FULL=$(vastai ssh-url "$INSTANCE_ID")
+SSH_STRIPPED="${SSH_FULL#ssh://}"
+if [[ "$SSH_STRIPPED" != "$SSH_FULL" ]]; then
+  # URL format: user@host:PORT
+  REMOTE_HOST="${SSH_STRIPPED%:*}"
+  REMOTE_PORT="${SSH_STRIPPED##*:}"
+else
+  # "-p PORT" format: strip leading "ssh " then parse
+  SSH_ARGS="${SSH_FULL#ssh }"
+  REMOTE_HOST=$(echo "$SSH_ARGS" | awk '{print $1}')
+  REMOTE_PORT=$(echo "$SSH_ARGS" | awk '{print $NF}')
+fi
+
+echo "Waiting for SSH to become reachable on port $REMOTE_PORT..."
+SSH_TIMEOUT=120
+SSH_ELAPSED=0
+until ssh -p "$REMOTE_PORT" -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
+    -o BatchMode=yes "$REMOTE_HOST" true 2>/dev/null; do
+  if (( SSH_ELAPSED >= SSH_TIMEOUT )); then
+    echo "ERROR: SSH did not become reachable within ${SSH_TIMEOUT}s."
+    exit 1
+  fi
+  echo "  SSH not ready yet (${SSH_ELAPSED}s elapsed)..."
+  sleep 5
+  SSH_ELAPSED=$(( SSH_ELAPSED + 5 ))
+done
+echo "  SSH is ready."
+echo ""
+
 # ─── Step 5: Upload code ──────────────────────────────────────────────────────
 echo "Uploading project files to instance..."
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-# vastai ssh-url returns: "root@host.vast.ai -p PORT"  (may have leading "ssh ")
-SSH_FULL=$(vastai ssh-url "$INSTANCE_ID")
-SSH_ARGS="${SSH_FULL#ssh }"             # strip leading "ssh " if present
-REMOTE_HOST=$(echo "$SSH_ARGS" | awk '{print $1}')   # root@host.vast.ai
-REMOTE_PORT=$(echo "$SSH_ARGS" | awk '{print $NF}')  # port number
 
 # Use rsync directly — vastai copy does not support --exclude flags
 rsync -az --progress \
   -e "ssh -p ${REMOTE_PORT} -o StrictHostKeyChecking=no" \
   --exclude='.git/' \
+  --exclude='.venv/' \
   --exclude='outputs/' \
   --exclude='results/' \
   --exclude='__pycache__/' \
@@ -375,6 +417,7 @@ TMP_RUNNER=$(mktemp /tmp/remote_run_XXXXXX)
 cat > "$TMP_RUNNER" <<RUNNER
 #!/usr/bin/env bash
 cd /workspace
+export MUJOCO_GL=osmesa
 echo "[remote] Starting: ${ENTRYPOINT_CMD} ${EXTRA_OVERRIDES}"
 ${ENTRYPOINT_CMD} ${EXTRA_OVERRIDES}
 EXIT_CODE=\$?

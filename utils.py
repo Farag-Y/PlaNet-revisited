@@ -140,8 +140,27 @@ def plot_metrics(metrics: Metrics, results_dir: str) -> None:
         axes[1, 1].set_title('Episode Reward')
         axes[1, 1].set_xlabel('Episode')
 
-    axes[1, 2].axis('off')
+    if metrics.test_rewards:
+        avg_test = [sum(ep) / len(ep) for ep in metrics.test_rewards]
+        axes[1, 2].plot(metrics.test_episodes, avg_test)
+        axes[1, 2].set_title('Avg Test Reward')
+        axes[1, 2].set_xlabel('Episode')
+    else:
+        axes[1, 2].axis('off')
 
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir, 'metrics.png'))
     plt.close(fig)
+
+
+def write_video(frames: list, title: str, path: str, fps: int = 30) -> None:
+    if not frames:
+        return
+    h, w = frames[0].shape[:2]
+    writer = cv2.VideoWriter(
+        os.path.join(path, f'{title}.mp4'),
+        cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h),
+    )
+    for frame in frames:
+        writer.write(frame[:, :, ::-1])  # RGB → BGR for cv2
+    writer.release()
