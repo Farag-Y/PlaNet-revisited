@@ -6,9 +6,11 @@ set -euo pipefail
 
 # ─── Flags ────────────────────────────────────────────────────────────────────
 AUTO=false
+KEEP_ALIVE=false
 for arg in "$@"; do
   case $arg in
-    --auto) AUTO=true ;;
+    --auto)       AUTO=true ;;
+    --keep-alive) KEEP_ALIVE=true ;;
   esac
 done
 
@@ -421,10 +423,17 @@ export MUJOCO_GL=osmesa
 echo "[remote] Starting: ${ENTRYPOINT_CMD} ${EXTRA_OVERRIDES}"
 ${ENTRYPOINT_CMD} ${EXTRA_OVERRIDES}
 EXIT_CODE=\$?
-echo "[remote] Run finished (exit \$EXIT_CODE). Destroying instance..."
-curl -s -X DELETE "https://console.vast.ai/api/v0/instances/${INSTANCE_ID}/" \
-  -H "Authorization: Bearer ${VASTAI_API_KEY}" > /dev/null
-echo "[remote] Instance destroy request sent."
+echo "[remote] Run finished (exit \$EXIT_CODE)."
+if [[ "${KEEP_ALIVE}" == "true" ]]; then
+  echo "[remote] --keep-alive set: instance will NOT be destroyed."
+else
+  echo "[remote] Waiting 15s for log stream to flush before destroying instance..."
+  sleep 15
+  echo "[remote] Destroying instance..."
+  curl -s -X DELETE "https://console.vast.ai/api/v0/instances/${INSTANCE_ID}/" \
+    -H "Authorization: Bearer ${VASTAI_API_KEY}" > /dev/null
+  echo "[remote] Instance destroy request sent."
+fi
 exit \$EXIT_CODE
 RUNNER
 
