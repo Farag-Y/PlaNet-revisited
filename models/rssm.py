@@ -33,7 +33,6 @@ class RSSM(nn.Module):
         self.fc_state_posterior        = nn.Linear(hidden_size, 2 * state_size)
 
     def forward(self, prev_state, actions, prev_belief, observations=None, nonterminals=None):
-        #TODO: What to do with non terminals
         sequence_length = actions.shape[0] +1
         (det_hidden_states, prior_states, prior_means, prior_std_devs,
             posterior_states, posterior_means, posterior_std_devs) = (
@@ -46,6 +45,8 @@ class RSSM(nn.Module):
             prev_state = prev_state if nonterminals is None else prev_state*nonterminals[t]
             hidden_input = self.act_fn(self.fc_embed_state_action(torch.concat((prev_state,actions[t]),dim=1)))## TODO: Why dimension 1 ?
             det_hidden_states[t+1]= self.rnn(hidden_input,det_hidden_states[t])
+            #TODO: Also empty out hidden state on episode end ? 
+            #det_hidden_states[t+1]= self.rnn(hidden_input, det_hidden_states[t] if nonterminals is None else det_hidden_states[t]*nonterminals[t])
 
             ## Prior
             hidden_prior = self.act_fn(self.fc_embed_belief_prior(det_hidden_states[t+1]))

@@ -1,4 +1,27 @@
 #!/usr/bin/env bash
+# Usage:
+#   bash scripts/train_vastai.sh [--auto] [--keep-alive]
+#   OR
+#   make train-vast                          # interactive
+#   make train-vast ARGS="--auto"
+#   make train-vast ARGS="--keep-alive"
+#   make train-vast ARGS="--auto --keep-alive"
+# Prerequisites:
+#   1. pip install vastai
+#   2. vastai set api-key <YOUR_KEY>
+#   3. Add VAST_API_KEY=<your_key> to .env at the project root
+#
+# What it does (interactive unless --auto):
+#   - Prompts for GPU type, CUDA version, entrypoint, Hydra overrides, and max $/hr
+#   - Searches Vast.ai for matching offers and shows the top 10
+#   - Provisions an instance, uploads the project, installs deps, and launches
+#     training detached (nohup); streams logs until you hit Ctrl-C
+#   - The remote instance self-destructs after training finishes
+#
+# Flags:
+#   --auto        Skip all interactive prompts; auto-select the cheapest offer
+#   --keep-alive  Do NOT destroy the instance after training completes
+#
 #TODO:
 #1. Bad port after initializing instant
 #2. Cleaning up bad instances is always unsuccessful.
@@ -392,6 +415,7 @@ rsync -az --progress \
   --exclude='__pycache__/' \
   --exclude='*.pyc' \
   --exclude='.python-version' \
+  --exclude='.env' \
   "$PROJECT_DIR/" \
   "$REMOTE_HOST:/workspace/"
 echo "Upload complete."
@@ -405,7 +429,7 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  libgl1 libosmesa6 libglib2.0-0 libgles2 libegl1
+  libgl1 libglib2.0-0 libgles2 libegl1 libegl-mesa0
 cd /workspace
 pip install -q uv
 uv sync
@@ -419,7 +443,9 @@ TMP_RUNNER=$(mktemp /tmp/remote_run_XXXXXX)
 cat > "$TMP_RUNNER" <<RUNNER
 #!/usr/bin/env bash
 cd /workspace
-export MUJOCO_GL=osmesa
+export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
+export PYTHONUNBUFFERED=1
 echo "[remote] Starting: ${ENTRYPOINT_CMD} ${EXTRA_OVERRIDES}"
 ${ENTRYPOINT_CMD} ${EXTRA_OVERRIDES}
 EXIT_CODE=\$?

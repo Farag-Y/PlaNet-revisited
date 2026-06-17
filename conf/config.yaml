@@ -13,7 +13,7 @@ render: false
 # Training
 episodes: 1000
 seed_episodes: 5
-collect_interval: 10
+collect_interval: 100
 batch_size: 50
 chunk_size: 50
 experience_size: 100000
@@ -53,12 +53,14 @@ action_noise: 0.3
 disable_cuda: false
 
 # Evaluation
-test: true
+test: false
 test_interval: 25
 test_episodes: 10
 
 # Checkpointing
 checkpoint_interval: 25
 checkpoint_experience: true
-models: "results/vast-ai-first/Checkpoint_150/models.pt"
-experience_replay_path: "results/vast-ai-first/Checkpoint_150/experience_replay.pt"
+models: ""
+experience_replay_path: ""
+# models: "results/vast-ai-first/Checkpoint_150/models.pt"
+# experience_replay_path: "results/vast-ai-first/Checkpoint_150/experience_replay.pt"
