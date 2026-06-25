@@ -19,7 +19,7 @@ dependencies = [
 
 [dependency-groups]
 dev = []
-vastai = ["vastai"]
+vastai = ["vastai", "typer>=0.12", "questionary>=2.0"]
 
 [tool.uv.sources]
 torch = [
