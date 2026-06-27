@@ -23,7 +23,7 @@ from cloud_storage import upload_config
     1. Good overshooting hyper params
     2. Test Phase of model
     3. Replication of 3 environments and comparing them to paper's results
-   
+    4. Save experience replay on a longer checkpoint.
 '''
 def execute_one_run_with_planner(cfg:DictConfig,device:str,env,rssm,encoder,planner,action,observation,belief,state,explore):
     with torch.no_grad():
@@ -189,9 +189,6 @@ def test(cfg: DictConfig, rssm, reward_model, encoder, planner, device, env,
 
 def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env,results_dir:str,r2_prefix:str=""):
     for episode in tqdm(range(metrics.last_episode+1, cfg.episodes + 1), total=cfg.episodes, initial=metrics.last_episode):
-        plot_metrics(metrics, results_dir)
-        save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics, results_dir, r2_prefix=r2_prefix)
-
         losses = train_world_model(cfg.collect_interval,cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device)
         record_losses(metrics, losses)
         collect_with_planner(cfg,device,env,rssm,encoder,planner,experience_replay,metrics)
