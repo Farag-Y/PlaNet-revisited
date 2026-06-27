@@ -17,6 +17,7 @@ from torch.nn import functional as F
 from torch.distributions.kl import kl_divergence
 from utils import (model_wrapper, initialize_models, collect_observations,
                    load_checkpoint, save_checkpoint, record_losses, plot_metrics, write_video)
+from cloud_storage import upload_config
 '''
     TODO:
     1. Good overshooting hyper params
@@ -186,14 +187,17 @@ def test(cfg: DictConfig, rssm, reward_model, encoder, planner, device, env,
     metrics.save(os.path.join(results_dir, 'metrics.pt'))
 
 
-def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env,results_dir:str):
+def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,planner,experience_replay,metrics:Metrics,device,env,results_dir:str,r2_prefix:str=""):
     for episode in tqdm(range(metrics.last_episode+1, cfg.episodes + 1), total=cfg.episodes, initial=metrics.last_episode):
+        plot_metrics(metrics, results_dir)
+        save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics, results_dir, r2_prefix=r2_prefix)
+
         losses = train_world_model(cfg.collect_interval,cfg,rssm,decoder_model,reward_model,encoder,adam_optim,experience_replay,metrics,device)
         record_losses(metrics, losses)
         collect_with_planner(cfg,device,env,rssm,encoder,planner,experience_replay,metrics)
         plot_metrics(metrics, results_dir)
         if episode % cfg.checkpoint_interval == 0:
-            save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics, results_dir)
+            save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics, results_dir, r2_prefix=r2_prefix)
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:
@@ -223,9 +227,12 @@ def main(cfg: DictConfig) -> None:
         experience_replay = (ExperienceReplay.load(cfg.experience_replay_path, device)
                              if cfg.experience_replay_path
                              else collect_observations(cfg, device, env, metrics))
-        results_dir = os.path.join(hydra.utils.get_original_cwd(), 'results', datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+        run_id = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        results_dir = os.path.join(hydra.utils.get_original_cwd(), 'results', run_id)
         os.makedirs(results_dir, exist_ok=True)
-        train(cfg, rssm, decoder_model, reward_model, encoder, adam_optim, planner, experience_replay, metrics, device, env, results_dir)
+        if getattr(cfg, 'r2_enabled', False):
+            upload_config(cfg, run_id)
+        train(cfg, rssm, decoder_model, reward_model, encoder, adam_optim, planner, experience_replay, metrics, device, env, results_dir, r2_prefix=run_id)
 
     env.close()
 

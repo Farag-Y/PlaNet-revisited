@@ -64,3 +64,10 @@ models: ""
 experience_replay_path: ""
 # models: "results/vast-ai-first/Checkpoint_150/models.pt"
 # experience_replay_path: "results/vast-ai-first/Checkpoint_150/experience_replay.pt"
+
+# Cloud storage (Cloudflare R2)
+# Enable with: r2_enabled=true r2_bucket=my-bucket
+# Credentials via env vars: CF_R2_ACCOUNT_ID, CF_R2_ACCESS_KEY, CF_R2_SECRET_KEY
+r2_enabled: true
+r2_bucket: "planet-checkpoints-vastai"
+r2_log_path: ""   # path to training log on disk; set to /workspace/training.log on Vast.ai

@@ -21,6 +21,8 @@ import typer
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
+INSTANCE_START_TIMEOUT = 600  # seconds to wait for instance to reach "running" status
+
 GPU_NAMES = ["RTX 4090", "RTX 3090", "RTX 3060", "A100 SXM4 80GB", "H100 NVL", "A6000"]
 GPU_FILTERS = ["RTX_4090", "RTX_3090", "RTX_3060", "A100_SXM4_80GB", "H100_NVL", "A6000"]
 
@@ -45,6 +47,9 @@ ENTRY_CMDS = [
 _instance_id: str | None = None
 _instance_started: bool = False
 _vastai_api_key: str = ""
+_r2_account_id: str = ""
+_r2_access_key: str = ""
+_r2_secret_key: str = ""
 
 
 def _cleanup() -> None:
@@ -175,15 +180,28 @@ def make_remote_runner(
     keep_alive: bool,
     instance_id: str,
     vastai_api_key: str,
+    r2_account_id: str = "",
+    r2_access_key: str = "",
+    r2_secret_key: str = "",
 ) -> str:
-    cmd_line = f"{entrypoint_cmd} {extra_overrides}".strip()
     keep_alive_str = "true" if keep_alive else "false"
+    r2_exports = ""
+    if r2_account_id and r2_access_key and r2_secret_key:
+        r2_exports = (
+            f"export CF_R2_ACCOUNT_ID={r2_account_id}\n"
+            f"export CF_R2_ACCESS_KEY={r2_access_key}\n"
+            f"export CF_R2_SECRET_KEY={r2_secret_key}\n"
+        )
+        # inject log path so Python can upload training.log during checkpoints
+        extra_overrides = (extra_overrides + " r2_log_path=/workspace/training.log").strip()
+    cmd_line = f"{entrypoint_cmd} {extra_overrides}".strip()
     return f"""\
 #!/usr/bin/env bash
 cd /workspace
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 export PYTHONUNBUFFERED=1
+{r2_exports}
 echo "[remote] Starting: {cmd_line}"
 {cmd_line}
 EXIT_CODE=$?
@@ -292,7 +310,12 @@ def train(
         for line in env_file.read_text().splitlines():
             if line.startswith("VAST_API_KEY="):
                 _vastai_api_key = line[len("VAST_API_KEY="):].strip()
-                break
+            elif line.startswith("CF_R2_ACCOUNT_ID="):
+                _r2_account_id = line[len("CF_R2_ACCOUNT_ID="):].strip()
+            elif line.startswith("CF_R2_ACCESS_KEY="):
+                _r2_access_key = line[len("CF_R2_ACCESS_KEY="):].strip()
+            elif line.startswith("CF_R2_SECRET_KEY="):
+                _r2_secret_key = line[len("CF_R2_SECRET_KEY="):].strip()
 
     if not _vastai_api_key:
         typer.echo(f"ERROR: VAST_API_KEY not found in {env_file}", err=True)
@@ -421,8 +444,8 @@ def train(
     typer.echo(f"Instance {_instance_id} created.\n")
 
     # ── Step 4a: Wait for running ──────────────────────────────────────────────
-    typer.echo("Waiting for instance to start (timeout: 5 min)...")
-    deadline = time.monotonic() + 300
+    typer.echo(f"Waiting for instance to start (timeout: {INSTANCE_START_TIMEOUT // 60} min)...")
+    deadline = time.monotonic() + INSTANCE_START_TIMEOUT
     elapsed = 0
     while True:
         r = subprocess.run(["vastai", "show", "instances", "--raw"], capture_output=True, text=True)
@@ -437,7 +460,7 @@ def train(
             typer.echo("  Instance is running.\n")
             break
         if time.monotonic() >= deadline:
-            typer.echo(f"ERROR: Instance did not start within 5 minutes (status: {status or 'unknown'}).", err=True)
+            typer.echo(f"ERROR: Instance did not start within {INSTANCE_START_TIMEOUT // 60} minutes (status: {status or 'unknown'}).", err=True)
             raise SystemExit(1)
         typer.echo(f"  Status: {status or 'unknown'} ({elapsed}s elapsed)...")
         time.sleep(10)
@@ -500,7 +523,8 @@ def train(
 
     # ── Step 7: Generate and upload remote_run.sh ──────────────────────────────
     runner_content = make_remote_runner(
-        entrypoint_cmd, extra_overrides, keep_alive, _instance_id, _vastai_api_key
+        entrypoint_cmd, extra_overrides, keep_alive, _instance_id, _vastai_api_key,
+        r2_account_id=_r2_account_id, r2_access_key=_r2_access_key, r2_secret_key=_r2_secret_key,
     )
     with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as f:
         f.write(runner_content)
