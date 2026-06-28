@@ -194,7 +194,9 @@ def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,plan
         collect_with_planner(cfg,device,env,rssm,encoder,planner,experience_replay,metrics)
         plot_metrics(metrics, results_dir)
         if episode % cfg.checkpoint_interval == 0:
-            save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics, results_dir, r2_prefix=r2_prefix)
+            save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, metrics, results_dir, r2_prefix=r2_prefix)
+        if cfg.experience_replay_interval and episode % cfg.experience_replay_interval == 0:
+            experience_replay.save(os.path.join(results_dir, f'experience_replay_{episode}.pt'))
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:

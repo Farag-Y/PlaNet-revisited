@@ -87,7 +87,7 @@ def load_checkpoint(cfg, device, rssm, decoder_model, reward_model, encoder, ada
     return Metrics.load(os.path.join(os.path.dirname(cfg.models), 'metrics.pt'))
 
 
-def save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, experience_replay, metrics, results_dir, r2_prefix: str = ""):
+def save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, metrics, results_dir, r2_prefix: str = ""):
     checkpoint_dir = os.path.join(results_dir, f'checkpoint_{episode}')
     os.makedirs(checkpoint_dir, exist_ok=True)
     torch.save({
@@ -98,8 +98,6 @@ def save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, ad
         'adam_optim':    adam_optim.state_dict(),
     }, os.path.join(checkpoint_dir, 'models.pt'))
     metrics.save(os.path.join(checkpoint_dir, 'metrics.pt'))
-    if cfg.checkpoint_experience:
-        experience_replay.save(os.path.join(checkpoint_dir, 'experience_replay.pt'))
     if getattr(cfg, 'r2_enabled', False):
         from cloud_storage import upload_checkpoint
         upload_checkpoint(cfg, checkpoint_dir, episode, r2_prefix)
