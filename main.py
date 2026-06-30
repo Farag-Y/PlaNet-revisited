@@ -16,7 +16,7 @@ from tqdm import tqdm
 from torch.nn import functional as F
 from torch.distributions.kl import kl_divergence
 from utils import (model_wrapper, initialize_models, collect_observations,
-                   load_checkpoint, save_checkpoint, record_losses, plot_metrics, write_video)
+                   load_checkpoint, save_checkpoint, save_experience_replay, record_losses, plot_metrics, write_video)
 from cloud_storage import upload_config
 '''
     TODO:
@@ -196,7 +196,7 @@ def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,plan
         if episode % cfg.checkpoint_interval == 0:
             save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, metrics, results_dir, r2_prefix=r2_prefix)
         if cfg.experience_replay_interval and episode % cfg.experience_replay_interval == 0:
-            experience_replay.save(os.path.join(results_dir, f'experience_replay_{episode}.pt'))
+            save_experience_replay(cfg, episode, experience_replay, results_dir, r2_prefix=r2_prefix)
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:

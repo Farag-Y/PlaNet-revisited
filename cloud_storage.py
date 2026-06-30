@@ -54,6 +54,12 @@ def upload_checkpoint(cfg: DictConfig, checkpoint_dir: str, episode: int, prefix
     print(f"[R2] Checkpoint {episode} uploaded under {prefix}/")
 
 
+def upload_experience_replay(cfg: DictConfig, local_path: str, episode: int, prefix: str) -> None:
+    client = _get_client(cfg)
+    key = f"{prefix}/experience_replay_{episode}.pt"
+    _upload_file(client, local_path, cfg.r2_bucket, key)
+
+
 def download_checkpoint(cfg: DictConfig, episode: int, dest_dir: str, prefix: str) -> None:
     client = _get_client(cfg)
     dest = Path(dest_dir)

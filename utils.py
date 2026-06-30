@@ -103,6 +103,14 @@ def save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, ad
         upload_checkpoint(cfg, checkpoint_dir, episode, r2_prefix)
 
 
+def save_experience_replay(cfg, episode, experience_replay, results_dir, r2_prefix: str = ""):
+    replay_path = os.path.join(results_dir, f'experience_replay_{episode}.pt')
+    experience_replay.save(replay_path)
+    if getattr(cfg, 'r2_enabled', False):
+        from cloud_storage import upload_experience_replay
+        upload_experience_replay(cfg, replay_path, episode, r2_prefix)
+
+
 def record_losses(metrics: Metrics, losses: list) -> None:
     kl_vals, obs_vals, rew_vals, os_vals = zip(*losses)
     n = len(losses)
