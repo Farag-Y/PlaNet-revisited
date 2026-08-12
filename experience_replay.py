@@ -1,11 +1,11 @@
+
 import numpy as np
-from typing import List
 import torch
 
-from env_wrapper import preprocess_observation_, postprocess_observation
+from env_wrapper import postprocess_observation, preprocess_observation_
 
 
-class ExperienceReplay():
+class ExperienceReplay:
     def __init__(self, experience_size, observation_size, image_shape, action_size, bit_depth, device):
         self.device = device
         self.bit_depth = bit_depth
@@ -30,7 +30,7 @@ class ExperienceReplay():
         self.steps += 1
         self.episodes += (1 if done else 0)
 
-    def _get_indexes(self, batch_size: int, batch_length: int) -> List[int]:
+    def _get_indexes(self, batch_size: int, batch_length: int) -> list[int]:
         # Guard: buffer must have enough transitions to form a sequence
         available = self.size if self.full else self.idx
         if available < batch_length:

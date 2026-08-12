@@ -13,7 +13,7 @@ class Encoder(nn.Module):
     self.conv2 = nn.Conv2d(32,64,4,stride=2)
     self.conv3 = nn.Conv2d(64,128,4,stride=2)
     self.conv4 = nn.Conv2d(128,256,4,stride=2)
-    self.fc1 = nn.Linear(1024,embedding_size)
+    self.fc1 = nn.Identity() if embedding_size == 1024 else nn.Linear(1024,embedding_size)
 
 
   def forward(self,observation):

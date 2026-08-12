@@ -33,8 +33,8 @@ grad_clip_norm: 1000
 
 # Overshooting
 overshooting_distance: 50
-overshooting_kl_beta: 1
-overshooting_reward_scale: 1
+overshooting_kl_beta: 0
+overshooting_reward_scale: 0
 
 # Losses
 global_kl_beta: 0.0
@@ -53,14 +53,14 @@ action_noise: 0.3
 disable_cuda: false
 
 # Evaluation
-test: false
+test: true
 test_interval: 25
 test_episodes: 10
 
 # Checkpointing
 checkpoint_interval: 25
 experience_replay_interval: 100  # save experience_replay_{episode}.pt alongside metrics.png every N episodes (0 = disabled)
-models: ""
+models: "/Users/yousseffarag/Self Projects/PlaNet/PlaNet-revisited/results/vast-ai/cartpole, no overshooting, first test/checkpoint_625/models.pt"
 experience_replay_path: ""
 # models: "results/vast-ai-first/Checkpoint_150/models.pt"
 # experience_replay_path: "results/vast-ai-first/Checkpoint_150/experience_replay.pt"

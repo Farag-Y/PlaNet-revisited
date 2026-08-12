@@ -1,23 +1,34 @@
 import os
+from datetime import datetime
+
 import cv2
+import hydra
 import numpy as np
 import torch
-import hydra
-from datetime import datetime
 from omegaconf import DictConfig
+from torch import nn
+from torch.distributions import Normal
+from torch.distributions.kl import kl_divergence
+from torch.nn import functional as F
+from tqdm import tqdm
 
+from cloud_storage import upload_config
 from env_wrapper import Env
 from experience_replay import ExperienceReplay
 from metrics import Metrics
 from models.rssm import RSSMOutput
-from torch import nn
-from torch.distributions import Normal
-from tqdm import tqdm
-from torch.nn import functional as F
-from torch.distributions.kl import kl_divergence
-from utils import (model_wrapper, initialize_models, collect_observations,
-                   load_checkpoint, save_checkpoint, save_experience_replay, record_losses, plot_metrics, write_video)
-from cloud_storage import upload_config
+from utils import (
+    collect_observations,
+    initialize_models,
+    load_checkpoint,
+    model_wrapper,
+    plot_metrics,
+    record_losses,
+    save_checkpoint,
+    save_experience_replay,
+    write_video,
+)
+
 '''
     TODO:
     1. Good overshooting hyper params

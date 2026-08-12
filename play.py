@@ -1,7 +1,7 @@
-import pygame
-import numpy as np
-import torch
 import hydra
+import numpy as np
+import pygame
+import torch
 from omegaconf import DictConfig
 
 from env_wrapper import Env
