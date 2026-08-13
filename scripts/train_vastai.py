@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Train on Vast.ai — Python rewrite of train_vastai.sh.
+"""Train on Vast.ai — rents a GPU, uploads the project, and runs training.
 
 Usage:
     uv run --group vastai python scripts/train_vastai.py [--auto] [--keep-alive]
-    make train-vast-py [ARGS="--auto --keep-alive"]
+    make train-vast [ARGS="--auto --keep-alive"]
 """
 
 import atexit

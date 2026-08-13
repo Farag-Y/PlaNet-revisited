@@ -3,10 +3,10 @@ id: default
 seed: 1
 
 # Environment
-env: cartpole-balance
+env: finger-spin
 symbolic_env: false
 max_episode_length: 1000
-action_repeat: 8 ##Recommended action repeats : Cartpole balance : 8, Cheetah: 4, ball_in_cup: 6
+action_repeat: 8 ##Recommended action repeats : cartpole: 8, reacher: 4, cheetah: 4, finger: 2, cup: 4, walker: 2.
 bit_depth: 5
 render: false
 
@@ -53,14 +53,14 @@ action_noise: 0.3
 disable_cuda: false
 
 # Evaluation
-test: true
+test: false
 test_interval: 25
 test_episodes: 10
 
 # Checkpointing
 checkpoint_interval: 25
 experience_replay_interval: 100  # save experience_replay_{episode}.pt alongside metrics.png every N episodes (0 = disabled)
-models: "/Users/yousseffarag/Self Projects/PlaNet/PlaNet-revisited/results/vast-ai/cartpole, no overshooting, first test/checkpoint_625/models.pt"
+models: ""
 experience_replay_path: ""
 # models: "results/vast-ai-first/Checkpoint_150/models.pt"
 # experience_replay_path: "results/vast-ai-first/Checkpoint_150/experience_replay.pt"

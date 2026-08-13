@@ -135,7 +135,7 @@ Hold a key to push the action to its maximum; release to return to zero. `R` res
 
 ## Training on Vast.ai
 
-`scripts/train_vastai.sh` is an interactive helper that rents a GPU on [Vast.ai](https://vast.ai), uploads the project, runs training, streams logs, and **automatically destroys the instance** when training finishes.
+`scripts/train_vastai.py` (run via `make train-vast`) is an interactive helper that rents a GPU on [Vast.ai](https://vast.ai), uploads the project, runs training, streams logs, and **automatically destroys the instance** when training finishes.
 
 ### Prerequisites
 
@@ -164,7 +164,7 @@ Hold a key to push the action to its maximum; release to return to zero. `R` res
 ### Usage
 
 ```bash
-bash scripts/train_vastai.sh
+make train-vast
 ```
 
 The script walks you through four interactive prompts:
@@ -182,7 +182,7 @@ It then lists up to 10 matching offers (sorted by price) and lets you pick one. 
 Pass `--auto` to skip the offer picker and confirmation and use the cheapest match:
 
 ```bash
-bash scripts/train_vastai.sh --auto
+make train-vast ARGS="--auto"
 ```
 
 ### What it does (step by step)
