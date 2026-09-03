@@ -25,7 +25,6 @@ from utils import (
     plot_metrics,
     record_losses,
     save_checkpoint,
-    save_experience_replay,
     write_video,
 )
 
@@ -206,8 +205,8 @@ def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,plan
         plot_metrics(metrics, results_dir)
         if episode % cfg.checkpoint_interval == 0:
             save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, metrics, results_dir, r2_prefix=r2_prefix)
-        if cfg.experience_replay_interval and episode % cfg.experience_replay_interval == 0:
-            save_experience_replay(cfg, episode, experience_replay, results_dir, r2_prefix=r2_prefix)
+        #if cfg.experience_replay_interval and episode % cfg.experience_replay_interval == 0:
+            # save_experience_replay(cfg, episode, experience_replay, results_dir, r2_prefix=r2_prefix)
 
 @hydra.main(config_path="conf", config_name="config", version_base=None)
 def main(cfg: DictConfig) -> None:

@@ -3,7 +3,7 @@ id: default
 seed: 1
 
 # Environment
-env: finger-spin
+env: cartpole-swingup-sparse
 symbolic_env: false
 max_episode_length: 1000
 action_repeat: 8 ##Recommended action repeats : cartpole: 8, reacher: 4, cheetah: 4, finger: 2, cup: 4, walker: 2.
@@ -16,7 +16,7 @@ seed_episodes: 5
 collect_interval: 100
 batch_size: 50
 chunk_size: 50
-experience_size: 100000
+experience_size: 1000000
 
 # Model
 embedding_size: 1024

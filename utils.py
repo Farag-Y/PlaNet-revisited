@@ -121,7 +121,7 @@ def record_losses(metrics: Metrics, losses: list) -> None:
 
 
 def plot_metrics(metrics: Metrics, results_dir: str) -> None:
-    fig, axes = plt.subplots(2, 3, figsize=(18, 8))
+    fig, axes = plt.subplots(2, 4, figsize=(24, 8))
     fig.suptitle(f'Training Metrics — Episode {metrics.last_episode}')
 
     if metrics.kl_loss:
@@ -146,16 +146,25 @@ def plot_metrics(metrics: Metrics, results_dir: str) -> None:
 
     if metrics.train_rewards:
         axes[1, 1].plot(metrics.train_rewards)
-        axes[1, 1].set_title('Episode Reward')
+        axes[1, 1].set_title('Episode Reward vs Episode')
         axes[1, 1].set_xlabel('Episode')
+
+    if metrics.train_rewards and metrics.steps:
+        axes[1, 2].plot(metrics.steps, metrics.train_rewards)
+        axes[1, 2].set_title('Episode Reward vs Env Step')
+        axes[1, 2].set_xlabel('Environment Step')
+    else:
+        axes[1, 2].axis('off')
 
     if metrics.test_rewards:
         avg_test = [sum(ep) / len(ep) for ep in metrics.test_rewards]
-        axes[1, 2].plot(metrics.test_episodes, avg_test)
-        axes[1, 2].set_title('Avg Test Reward')
-        axes[1, 2].set_xlabel('Episode')
+        axes[1, 3].plot(metrics.test_episodes, avg_test)
+        axes[1, 3].set_title('Avg Test Reward')
+        axes[1, 3].set_xlabel('Episode')
     else:
-        axes[1, 2].axis('off')
+        axes[1, 3].axis('off')
+
+    axes[0, 3].axis('off')
 
     plt.tight_layout()
     plt.savefig(os.path.join(results_dir, 'metrics.png'))
