@@ -208,6 +208,9 @@ EXIT_CODE=$?
 echo "[remote] Run finished (exit $EXIT_CODE)."
 if [[ "{keep_alive_str}" == "true" ]]; then
   echo "[remote] --keep-alive set: instance will NOT be destroyed."
+elif [[ $EXIT_CODE -ne 0 ]]; then
+  echo "[remote] Training FAILED (exit $EXIT_CODE) — leaving instance running so you can inspect /workspace/training.log."
+  echo "[remote] Destroy it manually via 'vastai destroy instance {instance_id}' when done."
 else
   echo "[remote] Waiting 15s for log stream to flush before destroying instance..."
   sleep 15
@@ -426,6 +429,7 @@ def train(
             "vastai", "create", "instance", offer_id,
             "--image", docker_image,
             "--disk", "50",
+            "--env", "-e NVIDIA_DRIVER_CAPABILITIES=all",
             "--ssh", "--raw",
         ],
         capture_output=True,
@@ -509,7 +513,7 @@ def train(
         "export DEBIAN_FRONTEND=noninteractive\n"
         "apt-get update -qq\n"
         "apt-get install -y --no-install-recommends "
-        "libgl1 libglib2.0-0 libgles2 libegl1 libegl-mesa0\n"
+        "libgl1 libglib2.0-0 libgles2 libegl1 libegl-mesa0 libopengl0\n"
         "cd /workspace\n"
         "pip install -q uv\n"
         "uv sync\n"

@@ -150,7 +150,7 @@ def plot_metrics(metrics: Metrics, results_dir: str) -> None:
         axes[1, 1].set_xlabel('Episode')
 
     if metrics.train_rewards and metrics.steps:
-        axes[1, 2].plot(metrics.steps, metrics.train_rewards)
+        axes[1, 2].plot(metrics.steps[-len(metrics.train_rewards):], metrics.train_rewards)
         axes[1, 2].set_title('Episode Reward vs Env Step')
         axes[1, 2].set_xlabel('Environment Step')
     else:
