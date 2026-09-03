@@ -23,8 +23,8 @@ import typer
 
 INSTANCE_START_TIMEOUT = 600  # seconds to wait for instance to reach "running" status
 
-GPU_NAMES = ["RTX 4090", "RTX 3090", "RTX 3060", "A100 SXM4 80GB", "H100 NVL", "A6000"]
-GPU_FILTERS = ["RTX_4090", "RTX_3090", "RTX_3060", "A100_SXM4_80GB", "H100_NVL", "A6000"]
+GPU_NAMES = ["RTX 3060", "RTX 4090", "RTX 3090", "A100 SXM4 80GB", "H100 NVL", "A6000"]
+GPU_FILTERS = ["RTX_3060", "RTX_4090", "RTX_3090", "A100_SXM4_80GB", "H100_NVL", "A6000"]
 
 CUDA_LABELS = ["CUDA 12.1", "CUDA 12.4"]
 CUDA_MINS = ["12.1", "12.4"]
@@ -357,6 +357,7 @@ def train(
 
         max_price_str = _ask(questionary.text(
             "Max price per hour in USD (e.g. 0.50):",
+            default="0.1",
             validate=_validate_price,
         ))
         max_price = float(max_price_str)
