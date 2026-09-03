@@ -124,7 +124,7 @@ class DMControlEnv(BaseEnv):
         self._play_renderer = mujoco.Renderer(model, height=480, width=480)
 
     def _render_obs(self):
-        self._obs_renderer.update_scene(self._env.physics.data.ptr)
+        self._obs_renderer.update_scene(self._env.physics.data.ptr, camera=0)
         return self._obs_renderer.render()
 
     def reset(self):
@@ -145,13 +145,13 @@ class DMControlEnv(BaseEnv):
         return self._images_to_observation(self._render_obs(), self.bit_depth), float(reward), done
 
     def render(self):
-        self._disp_renderer.update_scene(self._env.physics.data.ptr)
+        self._disp_renderer.update_scene(self._env.physics.data.ptr, camera=0)
         frame = self._disp_renderer.render()
         cv2.imshow('screen', frame[:, :, ::-1])
         cv2.waitKey(1)
 
     def render_frame(self, height: int = 480, width: int = 480) -> np.ndarray:
-        self._play_renderer.update_scene(self._env.physics.data.ptr)
+        self._play_renderer.update_scene(self._env.physics.data.ptr, camera=0)
         frame = self._play_renderer.render()
         if frame.shape[0] != height or frame.shape[1] != width:
             frame = cv2.resize(frame, (width, height), interpolation=cv2.INTER_LINEAR)

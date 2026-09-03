@@ -203,6 +203,9 @@ def train(cfg:DictConfig,rssm,decoder_model,reward_model,encoder,adam_optim,plan
         record_losses(metrics, losses)
         collect_with_planner(cfg,device,env,rssm,encoder,planner,experience_replay,metrics)
         plot_metrics(metrics, results_dir)
+        if episode % cfg.test_interval == 0:
+            test(cfg, rssm, reward_model, encoder, planner, device, env, metrics, results_dir, episode)
+            rssm.train(); reward_model.train(); encoder.train()
         if episode % cfg.checkpoint_interval == 0:
             save_checkpoint(cfg, episode, rssm, decoder_model, reward_model, encoder, adam_optim, metrics, results_dir, r2_prefix=r2_prefix)
         #if cfg.experience_replay_interval and episode % cfg.experience_replay_interval == 0:

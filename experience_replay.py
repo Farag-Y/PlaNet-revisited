@@ -47,7 +47,7 @@ class ExperienceReplay:
             batches.append(idxs)
         return batches
 
-    def _get_batch(self, idxs, batch_size, batch_length):
+    def _get_batch(self, idxs):
         # Stack list of per-sample index arrays into shape (batch_size, batch_length)
         stacked = np.stack(idxs, axis=0)
         obs = torch.as_tensor(self.observations[stacked].astype(np.float32))
@@ -60,7 +60,7 @@ class ExperienceReplay:
 
     def sample(self, batch_size, batch_length):
         batch_idxs = self._get_indexes(batch_size, batch_length)
-        batches = self._get_batch(batch_idxs, batch_size, batch_length)
+        batches = self._get_batch(batch_idxs)
         return batches
 
     def save(self, path: str) -> None:

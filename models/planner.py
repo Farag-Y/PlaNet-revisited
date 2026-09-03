@@ -43,6 +43,6 @@ class Planner(nn.Module):
       actions = actions.view(self.planning_horizon, B, self.candidates, self.action_size)
       top_actions = actions[:, torch.arange(B, device=belief.device).unsqueeze(1), top_idx, :]  # [H, B, top_k, action_size]
       action_mean    = top_actions.mean(dim=2, keepdim=True)
-      action_std_dev = top_actions.std(dim=2, keepdim=True)
+      action_std_dev = top_actions.std(dim=2, unbiased=False, keepdim=True)
 
     return action_mean[0].squeeze(dim=1)  
