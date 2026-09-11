@@ -46,6 +46,7 @@ ENTRY_CMDS = [
 
 _instance_id: str | None = None
 _instance_started: bool = False
+_never_destroy: bool = False  # if set, no code path in this script will ever destroy the instance
 _vastai_api_key: str = ""
 _r2_account_id: str = ""
 _r2_access_key: str = ""
@@ -53,7 +54,7 @@ _r2_secret_key: str = ""
 
 
 def _cleanup() -> None:
-    if _instance_started or not _instance_id:
+    if _never_destroy or _instance_started or not _instance_id:
         return
     typer.echo(f"\nCleaning up instance {_instance_id}...")
     result = subprocess.run(
@@ -291,7 +292,7 @@ def train(
     auto: bool = typer.Option(False, "--auto", help="Skip all prompts; auto-select cheapest offer."),
     keep_alive: bool = typer.Option(False, "--keep-alive", help="Do not destroy instance after training."),
 ) -> None:
-    global _instance_id, _instance_started, _vastai_api_key
+    global _instance_id, _instance_started, _never_destroy, _vastai_api_key
 
     # ── Step 0: Preflight ──────────────────────────────────────────────────────
     if subprocess.run(["which", "vastai"], capture_output=True).returncode != 0:
@@ -365,6 +366,20 @@ def train(
         ))
         max_price = float(max_price_str)
         typer.echo(f"  → ${max_price}/hr max\n")
+
+        never_destroy_choice = _ask(questionary.confirm(
+            "Never destroy this instance automatically (keep it running no matter what — "
+            "success, failure, or you interrupting this script)? You will have to destroy "
+            "it yourself from the Vast.ai console when you're done.",
+            default=False,
+        ))
+        if never_destroy_choice:
+            typer.echo("  → Instance will NEVER be auto-destroyed by this script.\n")
+        keep_alive = keep_alive or never_destroy_choice
+
+    # This must be set before instance creation so the atexit/SIGTERM cleanup
+    # handler (which can fire any time after that point) also honors it.
+    _never_destroy = keep_alive
 
     # ── Step 2: Search for offers ──────────────────────────────────────────────
     typer.echo("Searching for available offers...")
@@ -549,7 +564,10 @@ def train(
     )
     _instance_started = True  # disarm cleanup trap
     typer.echo(f"Training running on instance {_instance_id}.")
-    typer.echo("Instance will self-destruct when training completes.\n")
+    if keep_alive:
+        typer.echo("Instance will NOT be auto-destroyed — remember to destroy it yourself when done.\n")
+    else:
+        typer.echo("Instance will self-destruct when training completes.\n")
 
     # ── Step 9: Stream logs ───────────────────────────────────────────────────
     typer.echo("Streaming live logs (Ctrl-C to detach — training continues server-side):")
@@ -565,7 +583,10 @@ def train(
     except KeyboardInterrupt:
         pass
     typer.echo("\nDetached from log stream.")
-    typer.echo(f"Instance {_instance_id} is still running and will self-destruct when done.")
+    if keep_alive:
+        typer.echo(f"Instance {_instance_id} is still running and will NOT be auto-destroyed.")
+    else:
+        typer.echo(f"Instance {_instance_id} is still running and will self-destruct when done.")
     typer.echo(f"To reconnect:  ssh -p {remote_port} {' '.join(SSH_OPTS)} {remote_host}")
 
 
