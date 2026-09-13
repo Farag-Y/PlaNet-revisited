@@ -3,15 +3,15 @@ id: default
 seed: 1
 
 # Environment
-env: cartpole-swingup-sparse
+env: cheetah-run
 symbolic_env: false
 max_episode_length: 1000
-action_repeat: 8 ##Recommended action repeats : cartpole: 8, reacher: 4, cheetah: 4, finger: 2, cup: 4, walker: 2.
+action_repeat: 4 ##Recommended action repeats : cartpole: 8, reacher: 4, cheetah: 4, finger: 2, cup: 4, walker: 2.
 bit_depth: 5
 render: false
 
 # Training
-episodes: 1000
+episodes: 2000
 seed_episodes: 5
 collect_interval: 100
 batch_size: 50
